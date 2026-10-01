@@ -56,13 +56,30 @@ internal static class Checks
             facingMotion.Update(0, 0, 1.0 / 240, facingOptions);
             var rightFacing = facingMotion.Update(10, 0, 1.0 / 240, facingOptions);
             Check(Math.Abs(rightFacing.Rotation - 135) < .001 && rightFacing.Stretch == 1, "Richtungspfeil zeigt nach rechts ohne Stretch");
-            var downFacing = facingMotion.Update(10, 10, 1.0 / 240, facingOptions);
+            var downFacing = facingMotion.Update(10, 100, 1.0 / 240, facingOptions);
             Check(Math.Abs(downFacing.Rotation - 225) < .001, "Richtungspfeil zeigt nach unten");
-            for (int i = 0; i < 500; i++) rest = facingMotion.Update(10, 10, 1.0 / 240, facingOptions);
+            for (int i = 0; i < 500; i++) rest = facingMotion.Update(10, 100, 1.0 / 240, facingOptions);
             Check(rest.Rotation == downFacing.Rotation, "Richtung bleibt nach dem Stoppen erhalten");
             facingOptions.Stretch = true;
-            var stretchFacing = facingMotion.Update(200, 10, .01, facingOptions);
-            Check(stretchFacing.Stretch < 1 && stretchFacing.Rotation == 135, "Stretch und Richtungsmodus kombinierbar");
+            var stretchFacing = facingMotion.Update(200, 100, .01, facingOptions);
+            Check(stretchFacing.Stretch < 1 && Math.Abs(stretchFacing.Rotation - 135) < .001, "Stretch und Richtungsmodus kombinierbar");
+            foreach (double degrees in new[] { 13.0, 27, 68, 113, 167, -24, -79, -147 })
+            {
+                var tracker = new HeadingTracker();
+                tracker.Update(0, 0);
+                double rad = degrees * Math.PI / 180, px = 0, py = 0, rotation = 0;
+                for (int i = 1; i <= 400; i++)
+                {
+                    px = Math.Round(i * Math.Cos(rad)); py = Math.Round(i * Math.Sin(rad));
+                    rotation = tracker.Update(px, py);
+                }
+                double error = Math.Abs((rotation - 135 - degrees + 540) % 360 - 180);
+                Check(error < 4, $"Langsame pixelgerasterte Bewegung bei {degrees}° bleibt abseits des 45°-Rasters (Fehler {error:F2}°)");
+                for (int i = 0; i < 600; i++)
+                    Check(tracker.Update(px + (i % 2), py - (i % 2)) == rotation, "Richtung bleibt bei Stillstand und Ein-Pixel-Zittern exakt stabil");
+            }
+            results.RemoveAll(s => s == "PASS: Richtung bleibt bei Stillstand und Ein-Pixel-Zittern exakt stabil");
+            results.Add("PASS: Kein Nachdrehen bei Stillstand oder Ein-Pixel-Zittern");
             Check(DesktopPolicy.IsShell("StartMenuExperienceHost", "") && !DesktopPolicy.IsShell("game", "GameWindow"), "Startmenü wird vom Spiel unterschieden");
             Check(DesktopPolicy.Excluded("Game", "other.exe; GAME.exe") && !DesktopPolicy.Excluded("Game2", "game.exe"), "Spieleausnahmen vergleichen exakte Prozessnamen");
             Check(DesktopPolicy.Covers(new Rectangle(-1920, 0, 1920, 1080), new Rectangle(-1920, 0, 1920, 1080)), "Vollbild-Erkennung auf zweitem Monitor");

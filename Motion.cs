@@ -34,7 +34,8 @@ internal sealed class Motion
     private readonly Spring turn = new(0, .055, .82), squash = new(1, .12, .86), stretch = new(1, .2, .85);
     private double lastX, lastY, idle, direction;
     private bool initialized, moving;
-    private double facing = -135, facingRotation;
+    private readonly HeadingTracker heading = new();
+    internal bool HeadingChanged => heading.Changed;
     internal Pose Current { get; private set; } = new(0, 1, 1, 0);
 
     internal Pose Update(double x, double y, double dt, AnimationOptions? options = null)
@@ -43,6 +44,7 @@ internal sealed class Motion
         if (!initialized) { lastX = x; lastY = y; initialized = true; }
         double dx = x - lastX, dy = y - lastY, distance = Math.Sqrt(dx * dx + dy * dy);
         lastX = x; lastY = y;
+        double facingRotation = heading.Update(x, y);
         if (distance > .1)
         {
             // Physical mice stream targets continuously. Keep the real click position and
@@ -51,8 +53,6 @@ internal sealed class Motion
             double amount = Math.Clamp(speed / 1800, 0, 1);
             turn.Target = Math.Clamp(dx / distance * .75 - dy / distance * .62, -1, 1) * 70 * amount;
             direction = Math.Atan2(dy, dx) * 180 / Math.PI;
-            facingRotation += (direction - facing + 540) % 360 - 180;
-            facing = direction;
             squash.Target = 1 - .15 * amount;
             stretch.Target = Math.Clamp(1 - speed / 5500, .65, 1);
             idle = 0; moving = true;
@@ -73,5 +73,5 @@ internal sealed class Motion
             animate && (options?.Squash ?? true) ? squash.Value : 1, direction);
         return Current;
     }
-    internal void Reset() { initialized = moving = false; idle = 0; facing = -135; facingRotation = 0; turn.Reset(0); squash.Reset(1); stretch.Reset(1); Current = new(0, 1, 1, 0); }
+    internal void Reset() { initialized = moving = false; idle = 0; heading.Reset(); turn.Reset(0); squash.Reset(1); stretch.Reset(1); Current = new(0, 1, 1, 0); }
 }

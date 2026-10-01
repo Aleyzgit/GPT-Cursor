@@ -62,6 +62,7 @@ internal sealed class CursorSmoothing
 {
     private readonly SmoothValue x = new(), y = new(), rotation = new(), stretch = new(), squash = new(), axis = new();
     private double lastAxis, unwrappedAxis;
+    internal void HoldRotation(double value) => rotation.Reset(value);
     internal (double X, double Y) Position(double targetX, double targetY, double dt, AnimationOptions options, bool direct = false)
     {
         if (!options.PositionSmoothing || direct) { x.Reset(targetX); y.Reset(targetY); return (targetX, targetY); }
