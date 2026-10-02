@@ -23,6 +23,7 @@ internal class AnimationOptions
     public bool LeftClick { get; set; } = true;
     public bool RightClick { get; set; } = true;
     public bool ClickPulse { get; set; } = true;
+    public bool HoldClickSize { get; set; }
     public bool ClickRings { get; set; } = true;
     public bool PositionSmoothing { get; set; } = true;
     public SmoothingMethod PositionMethod { get; set; } = SmoothingMethod.Sine;
@@ -33,17 +34,32 @@ internal class AnimationOptions
 internal sealed class ClickMotion
 {
     private double left = 1, right = 1;
+    private double heldScale = 1;
+    private bool pendingLeft, pendingRight;
     internal void Trigger(bool rightButton)
     {
-        if (rightButton) right = 0; else left = 0;
+        if (rightButton) { right = 0; pendingRight = true; }
+        else { left = 0; pendingLeft = true; }
     }
-    internal Pose Apply(Pose pose, double dt, AnimationOptions options)
+    internal Pose Apply(Pose pose, double dt, AnimationOptions options, bool leftHeld = false, bool rightHeld = false)
     {
         if (!options.LeftClick) left = 1;
         if (!options.RightClick) right = 1;
         double age = Math.Min(left, right);
         double scale = options.ClickPulse && age < 1
             ? 1 - .20 * Math.Sin(age * Math.PI * 2) * Math.Pow(1 - age, 2) : 1;
+        if (options.HoldClickSize)
+        {
+            // Poll held state so a missed release or desktop switch cannot latch the size.
+            // Pending presses also preserve taps that begin and end between render frames.
+            bool held = options.LeftClick && (leftHeld || pendingLeft) || options.RightClick && (rightHeld || pendingRight);
+            double target = held ? .88 : 1;
+            heldScale = target + (heldScale - target) * Math.Exp(-(held ? 55 : 25) * Math.Max(0, dt));
+            if (Math.Abs(heldScale - target) < .0001) heldScale = target;
+            scale = heldScale;
+        }
+        else heldScale = 1;
+        pendingLeft = pendingRight = false;
         var result = pose with { Scale = scale,
             LeftRing = options.ClickRings && left < 1 ? left : -1,
             RightRing = options.ClickRings && right < 1 ? right : -1 };
@@ -51,5 +67,5 @@ internal sealed class ClickMotion
         left = Math.Min(1, left + step); right = Math.Min(1, right + step);
         return result;
     }
-    internal void Reset() { left = right = 1; }
+    internal void Reset() { left = right = heldScale = 1; pendingLeft = pendingRight = false; }
 }

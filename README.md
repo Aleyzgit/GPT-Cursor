@@ -16,6 +16,7 @@ Versions before 1.2.0 need one manual installation of the new setup to gain the 
 
 - Output rate: 60–360 FPS, 240 FPS by default.
 - Independent rotation, stretch, squash, after-wobble, left/right click bounce and click-ring switches.
+- **Keep small while pressed** replaces the brief click bounce with a held-down size effect: the cursor stays small until all enabled mouse buttons are released, then smoothly returns to normal. Left/right click switches still apply; click rings stay independent.
 - **Direction** offers Original, Follow movement · return at rest, and Follow movement · keep direction. Both movement-following styles support arbitrary angles using a short movement trail. The return style turns back smoothly along the shortest arc after stopping; the keep style holds its angle. Stretch and squash remain independent, with optional after-wobble in the return style.
 - Position and animation smoothing can be enabled separately, each with Sine easing, Soft spring or Responsive.
 - Configurable global shortcut (default Ctrl + Alt + C), optional startup in the tray, English/German language selection.

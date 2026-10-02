@@ -101,11 +101,12 @@ internal sealed class MainForm : Form
         Switch("Left-click animation", "Linksklick-Animation", 24, 396, preferences.LeftClick, v => preferences.LeftClick = v);
         Switch("Right-click animation", "Rechtsklick-Animation", 288, 396, preferences.RightClick, v => preferences.RightClick = v);
         Switch("Click bounce", "Beim Klick einfedern", 24, 427, preferences.ClickPulse, v => preferences.ClickPulse = v, 510);
-        Switch("Show click rings (both buttons)", "Klickringe anzeigen (beide Tasten)", 24, 458, preferences.ClickRings, v => preferences.ClickRings = v, 510);
-        Switch("Also replace text, loading and resize cursors", "Auch Text-, Lade- und Größenzeiger ersetzen", 24, 499, preferences.AllPointers, v => { preferences.AllPointers = engine.AllPointers = v; }, 510);
+        Switch("Keep small while pressed", "Beim Gedrückthalten klein bleiben", 24, 458, preferences.HoldClickSize, v => preferences.HoldClickSize = v, 510);
+        Switch("Show click rings (both buttons)", "Klickringe anzeigen (beide Tasten)", 24, 489, preferences.ClickRings, v => preferences.ClickRings = v, 510);
+        Switch("Also replace text, loading and resize cursors", "Auch Text-, Lade- und Größenzeiger ersetzen", 24, 530, preferences.AllPointers, v => { preferences.AllPointers = engine.AllPointers = v; }, 510);
 
-        LabelAt("Frame rate", "Bildrate", 24, 542);
-        var fps = Combo(288, 536, 248, "Cursor frame rate", "Cursor-Bildrate");
+        LabelAt("Frame rate", "Bildrate", 24, 573);
+        var fps = Combo(288, 567, 248, "Cursor frame rate", "Cursor-Bildrate");
         foreach (int rate in Preferences.FrameRates) fps.Items.Add($"{rate} FPS");
         fps.SelectedIndex = Array.IndexOf(Preferences.FrameRates, preferences.Fps);
         fps.SelectedIndexChanged += (_, _) => { preferences.Fps = timer.Fps = Preferences.FrameRates[fps.SelectedIndex]; Save(); };

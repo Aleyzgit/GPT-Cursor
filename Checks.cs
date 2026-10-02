@@ -120,9 +120,46 @@ internal static class Checks
             Check(click.Apply(noMotion, .01, options) == noMotion, "Klickanimation endet vollständig");
             click.Trigger(true); options.RightClick = false;
             Check(click.Apply(noMotion, .01, options) == noMotion, "Rechtsklick abschaltbar");
+            foreach (int fps in new[] { 60, 240, 360 })
+            {
+                var hold = new ClickMotion();
+                var holdOptions = new AnimationOptions { HoldClickSize = true, ClickPulse = false, ClickRings = false };
+                double dt = 1.0 / fps;
+                hold.Trigger(false);
+                var heldPose = hold.Apply(noMotion, dt, holdOptions, leftHeld: true);
+                Check(heldPose.Scale < 1 && heldPose.Scale > .88, $"Gedrückthalten verkleinert weich bei {fps} FPS");
+                for (int i = 0; i < fps * 2; i++) heldPose = hold.Apply(noMotion, dt, holdOptions, leftHeld: true);
+                Check(heldPose.Scale == .88 && heldPose.LeftRing == -1 && heldPose.RightRing == -1, $"Cursor bleibt über die Klickanimation hinaus klein, ohne Ring ({fps} FPS)");
+                hold.Trigger(true);
+                hold.Apply(noMotion, dt, holdOptions, leftHeld: true, rightHeld: true);
+                heldPose = hold.Apply(noMotion, dt, holdOptions, rightHeld: true);
+                Check(heldPose.Scale == .88, "Loslassen einer Taste vergrößert bei weiterhin gedrückter zweiter Taste nicht");
+                heldPose = hold.Apply(noMotion, dt, holdOptions);
+                Check(heldPose.Scale > .88 && heldPose.Scale < 1, $"Loslassen startet weiche Rückkehr bei {fps} FPS");
+                double previousScale = heldPose.Scale;
+                for (int i = 0; i < fps; i++)
+                {
+                    heldPose = hold.Apply(noMotion, dt, holdOptions);
+                    if (heldPose.Scale < previousScale || heldPose.Scale > 1) throw new InvalidOperationException("Instabile Größenrückkehr");
+                    previousScale = heldPose.Scale;
+                }
+                Check(heldPose.Scale == 1, $"Nach Loslassen exakt normale Größe ({fps} FPS)");
+                holdOptions.LeftClick = false;
+                hold.Trigger(false);
+                Check(hold.Apply(noMotion, dt, holdOptions, leftHeld: true).Scale == 1, "Deaktivierte Maustaste verkleinert nicht");
+                hold.Trigger(true);
+                Check(hold.Apply(noMotion, dt, holdOptions).Scale < 1, "Kurzer Klick zwischen zwei Frames bleibt sichtbar");
+                holdOptions.HoldClickSize = false;
+                Check(hold.Apply(noMotion, dt, holdOptions, rightHeld: true).Scale == 1, "Halten-Schalter stellt normale Größe sofort wieder her");
+                holdOptions.HoldClickSize = true;
+                hold.Reset();
+                Check(hold.Apply(noMotion, dt, holdOptions).Scale == 1, "Neustart verwirft gedrückten Zustand");
+            }
             var restored = JsonSerializer.Deserialize<Preferences>("{\"Size\":44,\"Animation\":false,\"AllPointers\":true}")!;
             Check(restored.Size == 44 && !restored.Animation && restored.AllPointers && restored.Fps == 240 && restored.LeftClick,
                 "Bestehende Einstellungen bleiben erhalten; neue Optionen erhalten Standardwerte");
+            Check(!restored.HoldClickSize && JsonSerializer.Deserialize<Preferences>(JsonSerializer.Serialize(new Preferences { HoldClickSize = true }))!.HoldClickSize,
+                "Größe-halten ist optional und wird gespeichert");
             Check(restored.Language == "en" && restored.ShortcutEnabled && restored.ShortcutModifiers == 3 && restored.ShortcutKey == 67,
                 "Englisch ist Standard; bisheriges Kürzel bleibt erhalten");
             Check(restored.Direction == DirectionStyle.Original && JsonSerializer.Deserialize<Preferences>("{\"FaceMovement\":true}")!.Direction == DirectionStyle.KeepDirection,
@@ -160,11 +197,15 @@ internal static class Checks
             using (var form = new MainForm(uiPreferences, persistSettings: false))
             {
                 var language = AllControls(form).OfType<ComboBox>().Single(c => c.AccessibleName == "Language");
+                var holdSize = AllControls(form).OfType<CheckBox>().Single(c => c.Text == "Keep small while pressed");
+                holdSize.Checked = true;
+                Check(uiPreferences.HoldClickSize && !uiPreferences.ClickRings, "Halten-Schalter unabhängig von Klickringen");
                 var directionChoice = AllControls(form).OfType<ComboBox>().Single(c => c.AccessibleName == "Direction style");
                 directionChoice.SelectedIndex = 1;
                 Check(uiPreferences.Direction == DirectionStyle.ReturnToRest && !uiPreferences.HoldHeadingAtRest, "Richtungs-Dropdown aktiviert Rückkehr ohne Stillstands-Sperre");
                 Check(AllControls(form).OfType<CheckBox>().Any(c => c.Text == "Show click rings (both buttons)" && !c.Checked), "Englischer Ringschalter zeigt gespeicherten Aus-Zustand");
                 language.SelectedIndex = 1;
+                Check(holdSize.Text == "Beim Gedrückthalten klein bleiben" && holdSize.Checked, "Halten-Schalter behält Zustand beim Sprachwechsel");
                 Check(directionChoice.Text == "Bewegungsrichtung · zurückdrehen" && uiPreferences.Direction == DirectionStyle.ReturnToRest, "Rückkehr-Auswahl bleibt beim Sprachwechsel erhalten");
                 Check(AllControls(form).OfType<CheckBox>().Any(c => c.Text == "Klickringe anzeigen (beide Tasten)" && !c.Checked), "Sprachwechsel übersetzt Ringschalter ohne Zustandsverlust");
                 Check(AllControls(form).OfType<ComboBox>().Single(c => c.AccessibleName == "Art der Positionsglättung").Text == "Sanfte Feder", "Deutscher Dropdown behält gewähltes Profil");

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.4.0
+
+- Add optional "Keep small while pressed" for left/right clicks, with a smooth return to normal size on release.
+- Respect individual button switches, support holding both buttons, and keep click rings independent.
+
 ## 1.3.0
 
 - Add a direction style that follows movement and smoothly returns to the original orientation at rest.
