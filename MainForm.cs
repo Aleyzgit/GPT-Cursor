@@ -18,7 +18,7 @@ internal sealed class MainForm : Form
     private readonly CheckBox shortcutEnabled;
     private readonly Label status, sizeValue, shortcutHint, smoothingHint;
     private readonly PreviewPanel preview;
-    private readonly ComboBox positionMode, effectsMode;
+    private readonly ComboBox positionMode, effectsMode, directionMode;
     private GlobalShortcut? shortcut;
     private readonly EventWaitHandle? quitSignal;
     private readonly UpdateService updates = new();
@@ -151,8 +151,11 @@ internal sealed class MainForm : Form
             if (systemControls.Contains(control)) { systemPage.Controls.Add(control); control.Top -= 558; }
             else { cursorPage.Controls.Add(control); if (control.Top >= 174) control.Top += 34; }
         }
-        var facing = Switch("Point in movement direction; keep direction when stopped", "In Bewegungsrichtung zeigen; beim Stoppen beibehalten", 24, 171, preferences.FaceMovement, v => preferences.FaceMovement = v, 510);
-        Controls.Remove(facing); cursorPage.Controls.Add(facing);
+        var directionLabel = LabelAt("Direction", "Ausrichtung", 24, 175, 120);
+        directionMode = Combo(150, 170, 386, "Direction style", "Art der Ausrichtung");
+        directionMode.SelectedIndexChanged += (_, _) => { if (!translating && directionMode.SelectedIndex >= 0) { preferences.Direction = (DirectionStyle)directionMode.SelectedIndex; Save(); } };
+        foreach (var control in new Control[] { directionLabel, directionMode })
+        { Controls.Remove(control); cursorPage.Controls.Add(control); }
         CheckBox? startup = null;
         bool startupOn = false;
         try { startupOn = Startup.Enabled; } catch { }
@@ -224,6 +227,11 @@ internal sealed class MainForm : Form
             string[] styles = German ? ["Sinus-Easing", "Sanfte Feder", "Reaktionsschnell"] : ["Sine easing", "Soft spring", "Responsive"];
             positionMode.Items.Clear(); positionMode.Items.AddRange(styles); positionMode.SelectedIndex = (int)preferences.PositionMethod;
             effectsMode.Items.Clear(); effectsMode.Items.AddRange(styles); effectsMode.SelectedIndex = (int)preferences.EffectsMethod;
+            directionMode.Items.Clear();
+            directionMode.Items.AddRange(German
+                ? ["Original", "Bewegungsrichtung · zurückdrehen", "Bewegungsrichtung · beibehalten"]
+                : ["Original", "Follow movement · return at rest", "Follow movement · keep direction"]);
+            directionMode.SelectedIndex = (int)preferences.Direction;
             sizeValue.Text = $"{preferences.Size} px";
             trayOpen.Text = T("Open settings", "Einstellungen öffnen");
             trayToggle.Text = T("Toggle cursor", "Cursor umschalten");

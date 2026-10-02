@@ -1,10 +1,20 @@
 namespace GPTCursor;
 
+internal enum DirectionStyle { Original, ReturnToRest, KeepDirection }
+
 internal class AnimationOptions
 {
     public bool Animation { get; set; } = true;
     public bool Rotation { get; set; } = true;
     public bool FaceMovement { get; set; }
+    public bool ReturnToRest { get; set; }
+    // Keep the existing FaceMovement setting compatible with pre-1.3 preferences.
+    internal DirectionStyle Direction
+    {
+        get => !FaceMovement ? DirectionStyle.Original : ReturnToRest ? DirectionStyle.ReturnToRest : DirectionStyle.KeepDirection;
+        set { FaceMovement = value != DirectionStyle.Original; ReturnToRest = value == DirectionStyle.ReturnToRest; }
+    }
+    internal bool HoldHeadingAtRest => FaceMovement && !ReturnToRest;
     public bool PauseFullscreen { get; set; } = true;
     public string ExcludedApps { get; set; } = "";
     public bool Stretch { get; set; } = true;

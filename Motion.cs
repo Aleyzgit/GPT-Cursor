@@ -35,6 +35,9 @@ internal sealed class Motion
     private double lastX, lastY, idle, direction;
     private bool initialized, moving;
     private readonly HeadingTracker heading = new();
+    private readonly Spring returningTurn = new(0, .18, 1);
+    private double headingIdle;
+    private bool wasReturning;
     internal bool HeadingChanged => heading.Changed;
     internal Pose Current { get; private set; } = new(0, 1, 1, 0);
 
@@ -66,12 +69,32 @@ internal sealed class Motion
         double wobble = moving && idle > 0 && idle < 1.41
             ? Math.Sin(idle / .66 * Math.PI * 2) * Math.Sin(idle / 1.41 * Math.PI) * 12.5 : 0;
         bool animate = options?.Animation ?? true;
+        bool returning = options?.Direction == DirectionStyle.ReturnToRest;
+        double rotation = facingRotation;
+        if (returning)
+        {
+            if (!wasReturning) { returningTurn.Reset(Current.Rotation); headingIdle = .10; }
+            headingIdle = heading.Changed ? 0 : headingIdle + dt;
+            // Tolerate gaps between mouse reports, then return along the shortest arc.
+            // Quantized one-pixel resting jitter must not restart the directional turn.
+            double target = headingIdle < .10 ? facingRotation : 0;
+            double delta = ((target - returningTurn.Value + 180) % 360 + 360) % 360 - 180;
+            returningTurn.Target = returningTurn.Value + delta;
+            returningTurn.Step(dt);
+            rotation = returningTurn.Value;
+            if (animate && options!.Wobble && headingIdle >= .10)
+            {
+                double age = headingIdle - .10;
+                if (age < 1.41) rotation += Math.Sin(age / .66 * Math.PI * 2) * Math.Sin(age / 1.41 * Math.PI) * 12.5;
+            }
+        }
+        wasReturning = returning;
         Current = new(
-            options?.FaceMovement == true ? facingRotation :
+            options?.FaceMovement == true ? rotation :
                 (animate && (options?.Rotation ?? true) ? turn.Value : 0) + (animate && (options?.Wobble ?? true) ? wobble : 0),
             animate && (options?.Stretch ?? true) ? stretch.Value : 1,
-            animate && (options?.Squash ?? true) ? squash.Value : 1, direction);
+            animate && (options?.Squash ?? true) ? squash.Value : 1, returning ? facingRotation - 135 : direction);
         return Current;
     }
-    internal void Reset() { initialized = moving = false; idle = 0; heading.Reset(); turn.Reset(0); squash.Reset(1); stretch.Reset(1); Current = new(0, 1, 1, 0); }
+    internal void Reset() { initialized = moving = wasReturning = false; idle = headingIdle = 0; heading.Reset(); returningTurn.Reset(0); turn.Reset(0); squash.Reset(1); stretch.Reset(1); Current = new(0, 1, 1, 0); }
 }

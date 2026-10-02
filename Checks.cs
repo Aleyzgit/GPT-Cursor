@@ -80,6 +80,7 @@ internal static class Checks
             }
             results.RemoveAll(s => s == "PASS: Richtung bleibt bei Stillstand und Ein-Pixel-Zittern exakt stabil");
             results.Add("PASS: Kein Nachdrehen bei Stillstand oder Ein-Pixel-Zittern");
+            CheckReturningDirection(Check);
             Check(DesktopPolicy.IsShell("StartMenuExperienceHost", "") && !DesktopPolicy.IsShell("game", "GameWindow"), "Startmenü wird vom Spiel unterschieden");
             Check(DesktopPolicy.Excluded("Game", "other.exe; GAME.exe") && !DesktopPolicy.Excluded("Game2", "game.exe"), "Spieleausnahmen vergleichen exakte Prozessnamen");
             Check(DesktopPolicy.Covers(new Rectangle(-1920, 0, 1920, 1080), new Rectangle(-1920, 0, 1920, 1080)), "Vollbild-Erkennung auf zweitem Monitor");
@@ -124,6 +125,11 @@ internal static class Checks
                 "Bestehende Einstellungen bleiben erhalten; neue Optionen erhalten Standardwerte");
             Check(restored.Language == "en" && restored.ShortcutEnabled && restored.ShortcutModifiers == 3 && restored.ShortcutKey == 67,
                 "Englisch ist Standard; bisheriges Kürzel bleibt erhalten");
+            Check(restored.Direction == DirectionStyle.Original && JsonSerializer.Deserialize<Preferences>("{\"FaceMovement\":true}")!.Direction == DirectionStyle.KeepDirection,
+                "Bisherige Richtungswahl bleibt beim Update erhalten");
+            var returnSettings = new Preferences { Direction = DirectionStyle.ReturnToRest };
+            Check(JsonSerializer.Deserialize<Preferences>(JsonSerializer.Serialize(returnSettings))!.Direction == DirectionStyle.ReturnToRest,
+                "Neuer Rückkehrmodus wird gespeichert und geladen");
             Check(GlobalShortcut.Valid(3, 67) && !GlobalShortcut.Valid(0, 67) && !GlobalShortcut.Valid(4, 67) && !GlobalShortcut.Valid(3, (uint)Keys.F12),
                 "Kürzel verlangt Strg oder Alt und unterstützt keine reservierte F12-Taste");
             Check(GlobalShortcut.Format(3, 67, false) == "Ctrl + Alt + C" && GlobalShortcut.Format(3, 67, true) == "Strg + Alt + C",
@@ -154,12 +160,20 @@ internal static class Checks
             using (var form = new MainForm(uiPreferences, persistSettings: false))
             {
                 var language = AllControls(form).OfType<ComboBox>().Single(c => c.AccessibleName == "Language");
+                var directionChoice = AllControls(form).OfType<ComboBox>().Single(c => c.AccessibleName == "Direction style");
+                directionChoice.SelectedIndex = 1;
+                Check(uiPreferences.Direction == DirectionStyle.ReturnToRest && !uiPreferences.HoldHeadingAtRest, "Richtungs-Dropdown aktiviert Rückkehr ohne Stillstands-Sperre");
                 Check(AllControls(form).OfType<CheckBox>().Any(c => c.Text == "Show click rings (both buttons)" && !c.Checked), "Englischer Ringschalter zeigt gespeicherten Aus-Zustand");
                 language.SelectedIndex = 1;
+                Check(directionChoice.Text == "Bewegungsrichtung · zurückdrehen" && uiPreferences.Direction == DirectionStyle.ReturnToRest, "Rückkehr-Auswahl bleibt beim Sprachwechsel erhalten");
                 Check(AllControls(form).OfType<CheckBox>().Any(c => c.Text == "Klickringe anzeigen (beide Tasten)" && !c.Checked), "Sprachwechsel übersetzt Ringschalter ohne Zustandsverlust");
                 Check(AllControls(form).OfType<ComboBox>().Single(c => c.AccessibleName == "Art der Positionsglättung").Text == "Sanfte Feder", "Deutscher Dropdown behält gewähltes Profil");
                 Check(AllControls(form).OfType<Button>().Any(c => c.Text == "Strg + Alt + C"), "Shortcut-Darstellung wechselt auf Deutsch");
                 language.SelectedIndex = 0;
+                directionChoice.SelectedIndex = 2;
+                Check(uiPreferences.HoldHeadingAtRest, "Beibehalten bleibt separat auswählbar");
+                directionChoice.SelectedIndex = 0;
+                Check(!uiPreferences.FaceMovement && !uiPreferences.ReturnToRest, "Originalmodus bleibt auswählbar");
                 Check(AllControls(form).OfType<ComboBox>().Single(c => c.AccessibleName == "Effect smoothing style").Text == "Responsive" && uiPreferences.PositionMethod == SmoothingMethod.Spring,
                     "Rückwechsel auf Englisch bewahrt beide Profile");
                 var rings = AllControls(form).OfType<CheckBox>().Single(c => c.Text == "Show click rings (both buttons)");
@@ -283,6 +297,76 @@ internal static class Checks
             return 1;
         }
     }
+    private static void CheckReturningDirection(Action<bool, string> check)
+    {
+        static double Arc(double a, double b) => Math.Abs(((a - b + 180) % 360 + 360) % 360 - 180);
+        foreach (int fps in new[] { 60, 240, 360 })
+        foreach (double degrees in new[] { 0.0, 180, 27, -79, 90 })
+        {
+            var options = new AnimationOptions { Direction = DirectionStyle.ReturnToRest, Wobble = false, EffectsSmoothing = false };
+            var motion = new Motion();
+            double dt = 1.0 / fps, rad = degrees * Math.PI / 180;
+            motion.Update(0, 0, dt, options);
+            double px = 0, py = 0;
+            Pose pose = default;
+            for (int i = 1; i <= fps; i++)
+            {
+                px = Math.Round(i * 600.0 / fps * Math.Cos(rad));
+                py = Math.Round(i * 600.0 / fps * Math.Sin(rad));
+                pose = motion.Update(px, py, dt, options);
+                CheckFinite(pose, double.PositiveInfinity);
+            }
+            check(Arc(pose.Rotation, degrees + 135) < 3 && pose.Stretch < 1 && pose.Squash < 1,
+                $"Rückkehrmodus folgt {degrees}° mit Verformung bei {fps} FPS");
+            double movingAngle = pose.Rotation;
+            for (int i = 0; i < fps / 20; i++) pose = motion.Update(px, py, dt, options);
+            check(Arc(pose.Rotation, movingAngle) < 3, $"Kurze Meldepausen starten keine Rückkehr bei {fps} FPS ({degrees}°)");
+            double previous = pose.Rotation, totalTurn = 0;
+            for (int i = 0; i < fps; i++)
+            {
+                pose = motion.Update(px + i % 2, py - i % 2, dt, options);
+                totalTurn += Math.Abs(pose.Rotation - previous); previous = pose.Rotation;
+            }
+            check(Arc(pose.Rotation, 0) < .01 && totalTurn <= Arc(movingAngle, 0) + 3,
+                $"Rückkehr nimmt kürzesten Weg und bleibt bei Sensorzittern ruhig ({fps} FPS, {degrees}°)");
+            // Restart in the opposite direction after resting; no stale held-angle lock.
+            for (int i = 1; i <= fps; i++) pose = motion.Update(px - i * 600.0 / fps * Math.Cos(rad), py - i * 600.0 / fps * Math.Sin(rad), dt, options);
+            check(Arc(pose.Rotation, degrees + 315) < 3, $"Neue Bewegung nach Rückkehr folgt Gegenrichtung ({fps} FPS, {degrees}°)");
+        }
+        foreach (var profile in Enum.GetValues<SmoothingMethod>())
+        {
+            var options = new AnimationOptions { Direction = DirectionStyle.ReturnToRest, EffectsMethod = profile, Wobble = true };
+            var motion = new Motion(); var filter = new CursorSmoothing(); filter.Reset(0, 0);
+            Pose pose = default;
+            for (int i = 0; i < 240; i++) pose = filter.Effects(motion.Update(i * 5, 0, 1.0 / 240, options), 1.0 / 240, options);
+            for (int i = 0; i < 720; i++) pose = filter.Effects(motion.Update(1195, 0, 1.0 / 240, options), 1.0 / 240, options);
+            check(Arc(pose.Rotation, 0) < .001 && Math.Abs(pose.Stretch - 1) < .001 && Math.Abs(pose.Squash - 1) < .001,
+                $"Rückkehr mit Nachwippen und {profile}-Glättung endet vollständig");
+            options.Stretch = options.Squash = false;
+            pose = filter.Effects(motion.Update(1300, 100, .01, options), .01, options);
+            check(pose.Stretch == 1 && pose.Squash == 1, "Verformung bleibt im Rückkehrmodus separat abschaltbar");
+        }
+        // Cross the +/-180 boundary repeatedly while moving: targets stay unwrapped.
+        var spin = new Motion();
+        var spinOptions = new AnimationOptions { Direction = DirectionStyle.ReturnToRest, Wobble = false };
+        double x = 0, y = 0, last = 0, largestStep = 0;
+        for (int i = 0; i < 1440; i++)
+        {
+            double angle = i * Math.PI / 180;
+            x += 5 * Math.Cos(angle); y += 5 * Math.Sin(angle);
+            var pose = spin.Update(x, y, 1.0 / 240, spinOptions);
+            largestStep = Math.Max(largestStep, Math.Abs(pose.Rotation - last)); last = pose.Rotation;
+        }
+        check(largestStep < 15, "Mehrfache Kreisbewegungen verursachen keine 360°-Sprünge");
+        double travelled = 0;
+        for (int i = 0; i < 480; i++)
+        {
+            var pose = spin.Update(x, y, 1.0 / 240, spinOptions);
+            travelled += Math.Abs(pose.Rotation - last); last = pose.Rotation;
+        }
+        check(Arc(last, 0) < .001 && travelled < 210, "Nach Kreisbewegungen kehrt der Cursor ohne zusätzliche Umdrehungen zurück");
+    }
+
     internal static int FrameRate(string output)
     {
         Directory.CreateDirectory(output);
@@ -324,9 +408,9 @@ internal static class Checks
         }
         catch (Exception e) { File.WriteAllText(Path.Combine(output, "frame-rate.txt"), "FAIL: " + e); return 1; }
     }
-    private static void CheckFinite(Pose p)
+    private static void CheckFinite(Pose p, double maxRotation = 120)
     {
-        if (!double.IsFinite(p.Rotation) || !double.IsFinite(p.Stretch) || !double.IsFinite(p.Squash) || Math.Abs(p.Rotation) > 120)
+        if (!double.IsFinite(p.Rotation) || !double.IsFinite(p.Stretch) || !double.IsFinite(p.Squash) || Math.Abs(p.Rotation) > maxRotation)
             throw new InvalidOperationException("Instabile Animation");
     }
     private sealed class FakeUpdateHandler(byte[] content) : HttpMessageHandler

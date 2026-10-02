@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0
+
+- Add a direction style that follows movement and smoothly returns to the original orientation at rest.
+- Keep the original animation and the direction-holding style as separate dropdown choices.
+- Preserve stretch, squash, click effects and optional after-wobble; retain existing direction preferences.
+
 ## 1.2.0
 
 - Fix direction locking to eight angles by estimating heading over a short travelled path.

@@ -81,9 +81,9 @@ internal sealed class CursorEngine : IDisposable
         if (!Native.GetCursorPos(out var point)) { SuspendForDesktop(); return; }
         var previous = Pose;
         var rawPose = motion.Update(point.X, point.Y, dt, Options);
-        if (Options.FaceMovement && !motion.HeadingChanged) smoothing.HoldRotation(previous.Rotation);
+        if (Options.HoldHeadingAtRest && !motion.HeadingChanged) smoothing.HoldRotation(previous.Rotation);
         var smoothedPose = smoothing.Effects(rawPose, dt, Options);
-        if (Options.FaceMovement && !motion.HeadingChanged) smoothedPose = smoothedPose with { Rotation = previous.Rotation, Axis = previous.Axis };
+        if (Options.HoldHeadingAtRest && !motion.HeadingChanged) smoothedPose = smoothedPose with { Rotation = previous.Rotation, Axis = previous.Axis };
         Pose = clicks.Apply(smoothedPose, dt, Options);
         bool dragging = (Native.GetAsyncKeyState(1) & 0x8000) != 0 || (Native.GetAsyncKeyState(2) & 0x8000) != 0 || (Native.GetAsyncKeyState(4) & 0x8000) != 0;
         var position = smoothing.Position(point.X, point.Y, dt, Options, dragging);
