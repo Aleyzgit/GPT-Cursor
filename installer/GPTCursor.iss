@@ -1,4 +1,6 @@
-#define AppVersion "1.1.0"
+#ifndef AppVersion
+  #error Build using installer/Build-Setup.ps1
+#endif
 [Setup]
 AppId={{AC9BC32F-BA18-4A98-AEB1-F4A9492E5407}
 AppName=GPT Cursor
@@ -58,6 +60,33 @@ Filename: "{app}\GPT Cursor.exe"; Parameters: "--activate"; Description: "{cm:La
 Filename: "{app}\GPT Cursor.exe"; Parameters: "--quit"; Flags: runhidden waituntilterminated; RunOnceId: "StopCursor"
 
 [Code]
+var
+  StartupInitialized: Boolean;
+
+procedure InitializeStartupChoice();
+var
+  Command: String;
+begin
+  if StartupInitialized then exit;
+  StartupInitialized := True;
+  { An upgrade must reflect the current startup choice, not the last installer task. }
+  if FileExists(ExpandConstant('{app}\installed.flag')) then begin
+    WizardForm.TasksList.Checked[0] := False;
+    if RegQueryStringValue(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Run', 'GPTCursor', Command) then
+      WizardForm.TasksList.Checked[0] := Pos('"' + ExpandConstant('{app}\GPT Cursor.exe') + '"', Command) = 1;
+  end;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpSelectTasks then InitializeStartupChoice();
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then InitializeStartupChoice();
+end;
+
 function StopInstalledCursor(): Boolean;
 var
   ExitCode: Integer;

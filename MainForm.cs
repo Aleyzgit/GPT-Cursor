@@ -21,6 +21,13 @@ internal sealed class MainForm : Form
     private readonly ComboBox positionMode, effectsMode;
     private GlobalShortcut? shortcut;
     private readonly EventWaitHandle? quitSignal;
+    private readonly UpdateService updates = new();
+    private readonly CancellationTokenSource updateCancellation = new();
+    private Button checkUpdateButton = null!, installUpdateButton = null!;
+    private Label updateLabel = null!;
+    private AppUpdate? availableUpdate;
+    private bool checkingUpdate;
+    private double nextUpdateCheck = 5;
     private double lastTime, lastPreview, ignoreHotkeyUntil;
     private bool closing, translating, recording;
     private string? noticeEn, noticeDe;
@@ -168,12 +175,24 @@ internal sealed class MainForm : Form
         compatibility.Font = new Font("Segoe UI", 9);
         foreach (var control in new Control[] { startup, fullscreen, exclusionsLabel, exclusions, compatibility })
         { Controls.Remove(control); systemPage.Controls.Add(control); }
+        var automaticUpdates = Switch("Check for updates automatically", "Automatisch nach Updates suchen", 24, 408, preferences.CheckUpdates, v => preferences.CheckUpdates = v, 505);
+        checkUpdateButton = new Button { Location = new Point(24, 448), Size = new Size(244, 36), FlatStyle = FlatStyle.Flat };
+        installUpdateButton = new Button { Location = new Point(284, 448), Size = new Size(244, 36), FlatStyle = FlatStyle.Flat, Enabled = false };
+        TextFor(checkUpdateButton, "Check for updates", "Nach Updates suchen");
+        TextFor(installUpdateButton, "Download and install", "Laden und installieren");
+        checkUpdateButton.Click += async (_, _) => await CheckForUpdates();
+        installUpdateButton.Click += async (_, _) => await InstallUpdate();
+        updateLabel = LabelAt($"Version {UpdateService.CurrentVersion}", $"Version {UpdateService.CurrentVersion}", 24, 496, 505, 64);
+        foreach (var control in new Control[] { automaticUpdates, checkUpdateButton, installUpdateButton, updateLabel })
+        { Controls.Remove(control); systemPage.Controls.Add(control); }
         Controls.Add(tabs); Controls.Add(footer);
         ApplyLanguage();
         timer.Tick += (_, _) =>
         {
             if (quitSignal?.WaitOne(0) == true) { Close(); return; }
             double now = clock.Elapsed.TotalSeconds;
+            if (persistSettings && preferences.CheckUpdates && now >= nextUpdateCheck && !checkingUpdate)
+            { nextUpdateCheck = now + 21600; _ = CheckForUpdates(); }
             try
             {
                 engine.Tick(now - lastTime);
@@ -265,6 +284,56 @@ internal sealed class MainForm : Form
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         { Notice("Settings apply for this session (folder is read-only).", "Einstellungen gelten für diese Sitzung (Ordner schreibgeschützt)."); }
     }
+    private async Task CheckForUpdates()
+    {
+        if (checkingUpdate || closing) return;
+        checkingUpdate = true; checkUpdateButton.Enabled = installUpdateButton.Enabled = false;
+        updateLabel.Text = T("Checking GitHub releases…", "GitHub-Releases werden geprüft…");
+        try
+        {
+            availableUpdate = await updates.CheckAsync(updateCancellation.Token);
+            if (closing) return;
+            updateLabel.Text = availableUpdate == null
+                ? T($"Version {UpdateService.CurrentVersion} · No newer published version.", $"Version {UpdateService.CurrentVersion} · Keine neuere veröffentlichte Version.")
+                : T($"Version {availableUpdate.Version} is available. Your settings will be kept.", $"Version {availableUpdate.Version} ist verfügbar. Deine Einstellungen bleiben erhalten.");
+            installUpdateButton.Enabled = availableUpdate != null;
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException or JsonException or OperationCanceledException or KeyNotFoundException or InvalidOperationException)
+        {
+            if (!closing) updateLabel.Text = T("Could not check for updates. Please try again later.", "Updates konnten nicht geprüft werden. Bitte später erneut versuchen.");
+        }
+        finally { checkingUpdate = false; if (!closing) checkUpdateButton.Enabled = true; }
+    }
+    private async Task InstallUpdate()
+    {
+        if (availableUpdate == null || checkingUpdate || closing) return;
+        checkingUpdate = true; checkUpdateButton.Enabled = installUpdateButton.Enabled = false;
+        updateLabel.Text = T("Downloading and verifying the installer…", "Installer wird geladen und geprüft…");
+        try
+        {
+            string path = await updates.DownloadAsync(availableUpdate, updateCancellation.Token);
+            if (closing) return;
+            var start = new ProcessStartInfo(path) { UseShellExecute = true };
+            if (File.Exists(Path.Combine(AppContext.BaseDirectory, "installed.flag")))
+                start.ArgumentList.Add("/DIR=" + AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar));
+            else
+            {
+                string settings = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GPTCursor", "settings.json");
+                if (!File.Exists(settings))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(settings)!);
+                    File.WriteAllText(settings, JsonSerializer.Serialize(preferences));
+                }
+            }
+            start.ArgumentList.Add("/LANG=" + (German ? "german" : "english"));
+            Process.Start(start); Close();
+        }
+        catch (Exception e) when (e is HttpRequestException or IOException or OperationCanceledException or System.ComponentModel.Win32Exception or UnauthorizedAccessException)
+        {
+            if (!closing) updateLabel.Text = T("Update was not installed. Please try again or use the setup from GitHub.", "Update nicht installiert. Bitte erneut versuchen oder das Setup von GitHub verwenden.");
+        }
+        finally { checkingUpdate = false; if (!closing) { checkUpdateButton.Enabled = true; installUpdateButton.Enabled = true; } }
+    }
     private void Notice(string english, string german) { noticeEn = english; noticeDe = german; UpdateStatus(); }
     private void ClearNotice() { noticeEn = noticeDe = null; UpdateStatus(); }
     private void Toggle() { try { if (engine.Active) engine.Stop(); else engine.Start(); ClearNotice(); } catch (Exception e) { HandleError(e); } }
@@ -315,6 +384,7 @@ internal sealed class MainForm : Form
         if (!closing)
         {
             closing = true; timer.Stop(); shortcut?.Dispose();
+            updateCancellation.Cancel(); updates.Dispose();
             engine.Dispose(); renderer.Dispose(); tray.Visible = false; tray.Dispose(); timer.Dispose();
             quitSignal?.Dispose();
         }

@@ -8,6 +8,7 @@ internal sealed class Preferences : AnimationOptions
     public int Fps { get; set; } = 240;
     public bool AllPointers { get; set; }
     public string Language { get; set; } = "en";
+    public bool CheckUpdates { get; set; } = true;
     public bool ShortcutEnabled { get; set; } = true;
     public uint ShortcutModifiers { get; set; } = 3;
     public uint ShortcutKey { get; set; } = (uint)Keys.C;

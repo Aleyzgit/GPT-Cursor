@@ -1,0 +1,59 @@
+name: Build and release
+on:
+  push:
+    branches: [master, main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify release version
+        shell: pwsh
+        run: |
+          $version = ([xml](Get-Content GPTCursor.csproj -Raw)).Project.PropertyGroup.Version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag and project version do not match.' }
+      - name: Build and test
+        shell: pwsh
+        run: |
+          dotnet build -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Build failed.' }
+          $test = Start-Process -FilePath '.\bin\Release\net10.0-windows\GPT Cursor.exe' -ArgumentList '--self-test test-output\ci' -Wait -PassThru
+          Get-Content test-output\ci\checks.txt
+          if ($test.ExitCode -ne 0) { throw 'Tests failed.' }
+      - name: Set up verified Inno Setup compiler
+        shell: pwsh
+        run: |
+          $file = Join-Path $env:RUNNER_TEMP 'innosetup.exe'
+          Invoke-WebRequest 'https://github.com/jrsoftware/issrc/releases/download/is-6_5_3/innosetup-6.5.3.exe' -OutFile $file
+          $sig = Get-AuthenticodeSignature $file
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notlike '*Pyrsys B.V.*') { throw 'Compiler signature invalid.' }
+          $dir = Join-Path $env:RUNNER_TEMP 'InnoSetup'
+          $setup = Start-Process $file -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/NOICONS',('/DIR="' + $dir + '"')) -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw 'Compiler setup failed.' }
+          "INNO_COMPILER=$dir\ISCC.exe" >> $env:GITHUB_ENV
+      - name: Build setup
+        shell: pwsh
+        run: ./installer/Build-Setup.ps1 -Compiler $env:INNO_COMPILER
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GPT-Cursor-Setup
+          path: dist/installer/*
+      - name: Publish tagged version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = Get-ChildItem ./dist/installer -File | Select-Object -ExpandProperty FullName
+          gh release create $env:GITHUB_REF_NAME @files --verify-tag --title "GPT Cursor $env:GITHUB_REF_NAME" --generate-notes
+          if ($LASTEXITCODE -ne 0) { throw 'Release publish failed.' }

@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
+$version = ([xml](Get-Content (Join-Path $project 'GPTCursor.csproj') -Raw)).Project.PropertyGroup.Version
 $testRoot = [IO.Path]::GetFullPath((Join-Path $project 'test-output\installer-lifecycle'))
 $appDir = [IO.Path]::GetFullPath((Join-Path $testRoot 'app'))
 if (-not $appDir.StartsWith($project + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Test directory outside workspace.' }
@@ -13,7 +14,7 @@ New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
 $results = [Collections.Generic.List[string]]::new()
 try {
     $setupArgs = @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/TASKS=startup',('/DIR="' + $appDir + '"'),'/GROUP="GPT Cursor Installer Test"',('/LOG="' + (Join-Path $testRoot 'install.log') + '"'))
-    $setup = Start-Process -FilePath (Join-Path $project 'dist\installer\GPT-Cursor-Setup-1.1.0.exe') -ArgumentList $setupArgs -WindowStyle Hidden -Wait -PassThru
+    $setup = Start-Process -FilePath (Join-Path $project "dist\installer\GPT-Cursor-Setup-$version.exe") -ArgumentList $setupArgs -WindowStyle Hidden -Wait -PassThru
     if ($setup.ExitCode -ne 0) { throw "Install failed: $($setup.ExitCode)" }
     if (-not (Test-Path $uninstallKey)) { throw 'Uninstall registration missing.' }
     if (-not (Test-Path (Join-Path $appDir 'coreclr.dll'))) { throw 'Bundled runtime missing.' }

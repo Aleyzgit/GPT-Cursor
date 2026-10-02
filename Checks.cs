@@ -128,6 +128,28 @@ internal static class Checks
                 "Kürzel verlangt Strg oder Alt und unterstützt keine reservierte F12-Taste");
             Check(GlobalShortcut.Format(3, 67, false) == "Ctrl + Alt + C" && GlobalShortcut.Format(3, 67, true) == "Strg + Alt + C",
                 "Tastenkombination wird in beiden Sprachen angezeigt");
+            byte[] updatePayload = [10, 20, 30, 40];
+            string updateHash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(updatePayload));
+            string releaseJson = JsonSerializer.Serialize(new { draft = false, prerelease = false, tag_name = "v9.0.0", assets = new[] {
+                new { name = "GPT-Cursor-Setup-9.0.0.exe", browser_download_url = UpdateService.Repository + "/releases/download/v9.0.0/GPT-Cursor-Setup-9.0.0.exe", digest = "sha256:" + updateHash }
+            }});
+            var update = UpdateService.Parse(releaseJson, new Version(1, 2, 0));
+            Check(update?.Version == new Version(9, 0, 0), "Update erkennt neuere stabile Release-Version");
+            Check(UpdateService.Parse(releaseJson, new Version(9, 0, 0)) == null && UpdateService.Parse(releaseJson, new Version(10, 0, 0)) == null, "Kein Update auf gleiche oder ältere Version");
+            Check(UpdateService.Parse(releaseJson.Replace("\"prerelease\":false", "\"prerelease\":true"), new Version(1, 0, 0)) == null, "Vorabversionen werden nicht automatisch angeboten");
+            bool rejectedUrl = false;
+            try { UpdateService.Parse(releaseJson.Replace("github.com/Aleyzgit", "example.com/attacker"), new Version(1, 0, 0)); } catch (InvalidDataException) { rejectedUrl = true; }
+            Check(rejectedUrl, "Fremde Installer-URLs werden abgelehnt");
+            using (var downloader = new UpdateService(new FakeUpdateHandler(updatePayload)))
+            {
+                string downloaded = Task.Run(() => downloader.DownloadAsync(update!, CancellationToken.None)).GetAwaiter().GetResult();
+                try { Check(File.ReadAllBytes(downloaded).SequenceEqual(updatePayload), "Update-Download prüft SHA-256 vor Übergabe an Installer"); }
+                finally { File.Delete(downloaded); Directory.Delete(Path.GetDirectoryName(downloaded)!); }
+                bool badHash = false;
+                try { Task.Run(() => downloader.DownloadAsync(update! with { Sha256 = new string('0', 64) }, CancellationToken.None)).GetAwaiter().GetResult(); }
+                catch (InvalidDataException) { badHash = true; }
+                Check(badHash, "Manipulierter oder beschädigter Download wird verworfen");
+            }
             var uiPreferences = new Preferences { Size = 44, PositionMethod = SmoothingMethod.Spring, EffectsMethod = SmoothingMethod.Responsive, ClickRings = false };
             using (var form = new MainForm(uiPreferences, persistSettings: false))
             {
@@ -306,6 +328,11 @@ internal static class Checks
     {
         if (!double.IsFinite(p.Rotation) || !double.IsFinite(p.Stretch) || !double.IsFinite(p.Squash) || Math.Abs(p.Rotation) > 120)
             throw new InvalidOperationException("Instabile Animation");
+    }
+    private sealed class FakeUpdateHandler(byte[] content) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { RequestMessage = request, Content = new ByteArrayContent(content) });
     }
     internal static void Snapshot(string output)
     {
