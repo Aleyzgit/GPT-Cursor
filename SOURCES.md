@@ -31,7 +31,18 @@ Read-only untersuchte Quelle: `app/resources/app.asar`.
 | Längsstauchung | clamp(1 − speed/5500, 0.65, 1) |
 | Nachwippen | 1.41 s Dauer, 0.66 s Periode, 12.5° Amplitude |
 
-Anpassungen: Klickdurchlässiges natives Windows-Overlay statt DOM-Overlay; Verformung aus laufender Mausgeschwindigkeit statt Fortschritt eines diskreten Agent-Wegs; Pfeilspitze folgt dem Klickpunkt; keine Bézier-Verzögerung der Position, keine Einblend-Unschärfe, kein farbiger Glow. Die vorhandene neutrale Kantenglättung des PNG bleibt erhalten. Die Animation nutzt `UpdateLayeredWindow`; `MagShowSystemCursor` steuert ausschließlich die Sichtbarkeit des nativen Zeigers. Die endgültige Engine ersetzt keine Systemcursorbilder. Damit konkurriert sie nicht mehr mit den Bildaktualisierungen von MouseX.
+Anpassungen: Klickdurchlässiges natives Windows-Overlay statt DOM-Overlay; Verformung aus laufender Mausgeschwindigkeit statt Fortschritt eines diskreten Agent-Wegs; Pfeilspitze folgt dem Klickpunkt; keine Bézier-Verzögerung der Position, keine Einblend-Unschärfe, kein farbiger Glow. Die vorhandene neutrale Kantenglättung des PNG bleibt erhalten. Die Desktop-Animation nutzt `UpdateLayeredWindow`; `MagShowSystemCursor` steuert die Sichtbarkeit des nativen Zeigers. Seit 1.5.0 ersetzt ein separater statischer Fallback vorübergehend Pfeil/Hand in Start/Suche. Andere Cursorprogramme können ihn überschreiben; nach einem Wiederholungsversuch gibt die App den Vorrang ab. Eine Abhängigkeit von MouseX besteht nicht.
+
+## Oberfläche ab 1.6.0
+
+Read-only analysiert: `OpenAI.Codex_26.930.3930.0_x64__2p2nqsd0c76g0/app/resources/app.asar`.
+
+- `app-shared-6fb15e58cd7f.css`, `app-primary-547a6c7b4fb3.css`, `app-initial-341eb5dd9ad5.css`: neutrale Flächen, Textkontraste, Abstände, Rundungen und Bedienelemente.
+- `SegmentedControl-1b0cd2c8f252.css`, `checkbox-a29fd55a92ab.css`: Auswahlzustände und Schalter.
+- Die Vorlage verwendet unter anderem `corner-shape: superellipse(1.5)`, teilweise mit um Faktor 1.25 vergrößertem Radius, sowie Übergänge von 150 ms.
+- Referenzflächen: Weiß / `#212121`, Sidebar `#f9f9f9` / `#181818`, sekundär `#f3f3f3` / `#303030`; feine neutrale Trennlinien.
+
+Die Oberfläche ist eine eigene WinForms-Implementierung. `UiKit.cs` bildet geglättete Ecken durch abgetastete Superellipsen nach; Schalter bewegen sich über 150 ms. Schrift ist Segoe UI, Dropdown-Popups und Fensterrahmen bleiben Windows-nativ. Navigation, Vorschau und Einstellungsgruppen sind für GPT Cursor gestaltet. Kein CSS, JavaScript oder proprietärer Font der Desktop-App wird mitgeliefert. Die UI ist eine Annäherung an die untersuchte App, keine pixelidentische Kopie.
 
 ## Windows-Schnittstellen
 

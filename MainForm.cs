@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace GPTCursor;
 
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     private readonly CursorEngine engine = new();
     private readonly CursorRenderer renderer = new();
@@ -12,13 +12,13 @@ internal sealed class MainForm : Form
     private readonly Preferences preferences;
     private readonly bool persistSettings;
     private readonly List<Action> translations = [];
-    private readonly NotifyIcon tray;
-    private readonly ToolStripMenuItem trayOpen, trayToggle, trayExit;
-    private readonly Button toggle, shortcutButton;
-    private readonly CheckBox shortcutEnabled;
-    private readonly Label status, sizeValue, shortcutHint, smoothingHint;
-    private readonly PreviewPanel preview;
-    private readonly ComboBox positionMode, effectsMode, directionMode;
+    private NotifyIcon tray = null!;
+    private ToolStripMenuItem trayOpen = null!, trayToggle = null!, trayExit = null!;
+    private Button toggle = null!, shortcutButton = null!;
+    private CheckBox shortcutEnabled = null!;
+    private Label status = null!, sizeValue = null!, shortcutHint = null!, smoothingHint = null!;
+    private PreviewPanel preview = null!;
+    private ComboBox positionMode = null!, effectsMode = null!, directionMode = null!;
     private GlobalShortcut? shortcut;
     private readonly EventWaitHandle? quitSignal;
     private readonly UpdateService updates = new();
@@ -31,7 +31,6 @@ internal sealed class MainForm : Form
     private double lastTime, lastPreview, ignoreHotkeyUntil;
     private bool closing, translating, recording;
     private string? noticeEn, noticeDe;
-    private static readonly Color Ink = Color.FromArgb(28, 29, 31), Muted = Color.FromArgb(107, 108, 110), Paper = Color.FromArgb(247, 247, 244);
     private bool German => preferences.Language == "de";
     private string T(string english, string german) => German ? german : english;
 
@@ -42,155 +41,13 @@ internal sealed class MainForm : Form
         if (persistSettings) quitSignal = new EventWaitHandle(false, EventResetMode.ManualReset, InstanceControl.QuitEvent);
         SuspendLayout();
         AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi;
-        Text = "GPT Cursor"; ClientSize = new Size(560, 780); AutoScroll = true;
-        FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false;
-        StartPosition = FormStartPosition.CenterScreen; BackColor = Paper;
-        Font = new Font("Segoe UI", 10); ForeColor = Ink;
-        Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
+        Text = "GPT Cursor"; ClientSize = new Size(900, 760);
+        MinimumSize = new Size(800, 620); FormBorderStyle = FormBorderStyle.Sizable;
+        StartPosition = FormStartPosition.CenterScreen;
+        Font = new Font("Segoe UI", 10); Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath!);
         timer = new FrameTimer(this) { Fps = preferences.Fps };
         engine.Options = preferences; engine.Size = preferences.Size; engine.AllPointers = preferences.AllPointers;
-
-        void TextFor(Control control, string english, string german)
-        {
-            translations.Add(() => { control.Text = T(english, german); control.AccessibleName = control is Label ? null : control.Text; });
-        }
-        Label LabelAt(string english, string german, int x, int y, int width = 220, int height = 26)
-        {
-            var label = new Label { Location = new Point(x, y), Size = new Size(width, height), ForeColor = Muted };
-            TextFor(label, english, german); Controls.Add(label); return label;
-        }
-        CheckBox Switch(string english, string german, int x, int y, bool value, Action<bool> change, int width = 242)
-        {
-            var box = new CheckBox { Checked = value, Location = new Point(x, y), Size = new Size(width, 28) };
-            TextFor(box, english, german);
-            box.CheckedChanged += (_, _) => { if (translating) return; change(box.Checked); Save(); preview?.Invalidate(); };
-            Controls.Add(box); return box;
-        }
-        ComboBox Combo(int x, int y, int width, string english, string german)
-        {
-            var box = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Location = new Point(x, y), Size = new Size(width, 30) };
-            translations.Add(() => box.AccessibleName = T(english, german)); Controls.Add(box); return box;
-        }
-        preview = new PreviewPanel { Location = new Point(24, 16), Size = new Size(512, 100), BackColor = Color.FromArgb(29, 30, 32) };
-        preview.Paint += PaintPreview;
-        preview.MouseDown += (_, e) => { if (!engine.Active && e.Button is MouseButtons.Left or MouseButtons.Right) engine.PreviewClick(e.Button == MouseButtons.Right); };
-        Controls.Add(preview);
-        LabelAt("Size", "Größe", 24, 133, 95);
-        sizeValue = LabelAt($"{preferences.Size} px", $"{preferences.Size} px", 473, 133, 70);
-        var size = new TrackBar { Minimum = 24, Maximum = 64, Value = preferences.Size, TickFrequency = 8, Location = new Point(120, 127), Size = new Size(343, 40), BackColor = Paper };
-        translations.Add(() => size.AccessibleName = T("Cursor size", "Cursorgröße"));
-        size.ValueChanged += (_, _) => { preferences.Size = engine.Size = size.Value; sizeValue.Text = $"{size.Value} px"; Save(); }; Controls.Add(size);
-
-        var movement = new List<CheckBox>();
-        Switch("Movement animation", "Bewegungsanimation", 24, 174, preferences.Animation, v => { preferences.Animation = v; foreach (var box in movement) box.Enabled = v; }, 510);
-        movement.Add(Switch("Rotation", "Drehung", 24, 205, preferences.Rotation, v => preferences.Rotation = v));
-        movement.Add(Switch("Stretch", "Dehnung", 288, 205, preferences.Stretch, v => preferences.Stretch = v));
-        movement.Add(Switch("Squash", "Stauchung", 24, 236, preferences.Squash, v => preferences.Squash = v));
-        movement.Add(Switch("After-wobble", "Nachwippen", 288, 236, preferences.Wobble, v => preferences.Wobble = v));
-        foreach (var box in movement) box.Enabled = preferences.Animation;
-
-        positionMode = Combo(288, 280, 248, "Position smoothing style", "Art der Positionsglättung");
-        effectsMode = Combo(288, 318, 248, "Effect smoothing style", "Art der Effektglättung");
-        Switch("Smooth position", "Position glätten", 24, 282, preferences.PositionSmoothing, v => { preferences.PositionSmoothing = v; positionMode.Enabled = v; });
-        Switch("Smooth animation", "Animation glätten", 24, 320, preferences.EffectsSmoothing, v => { preferences.EffectsSmoothing = v; effectsMode.Enabled = v; });
-        positionMode.Enabled = preferences.PositionSmoothing; effectsMode.Enabled = preferences.EffectsSmoothing;
-        positionMode.SelectedIndexChanged += (_, _) => { if (!translating) { preferences.PositionMethod = (SmoothingMethod)positionMode.SelectedIndex; Save(); UpdateSmoothingHint(); } };
-        effectsMode.SelectedIndexChanged += (_, _) => { if (!translating) { preferences.EffectsMethod = (SmoothingMethod)effectsMode.SelectedIndex; Save(); } };
-        smoothingHint = LabelAt("", "", 24, 354, 512, 34); smoothingHint.Font = new Font("Segoe UI", 8.5f);
-
-        Switch("Left-click animation", "Linksklick-Animation", 24, 396, preferences.LeftClick, v => preferences.LeftClick = v);
-        Switch("Right-click animation", "Rechtsklick-Animation", 288, 396, preferences.RightClick, v => preferences.RightClick = v);
-        Switch("Click bounce", "Beim Klick einfedern", 24, 427, preferences.ClickPulse, v => preferences.ClickPulse = v, 510);
-        Switch("Keep small while pressed", "Beim Gedrückthalten klein bleiben", 24, 458, preferences.HoldClickSize, v => preferences.HoldClickSize = v, 510);
-        Switch("Show click rings (both buttons)", "Klickringe anzeigen (beide Tasten)", 24, 489, preferences.ClickRings, v => preferences.ClickRings = v, 510);
-        Switch("Also replace text, loading and resize cursors", "Auch Text-, Lade- und Größenzeiger ersetzen", 24, 530, preferences.AllPointers, v => { preferences.AllPointers = engine.AllPointers = v; }, 510);
-
-        LabelAt("Frame rate", "Bildrate", 24, 573);
-        var fps = Combo(288, 567, 248, "Cursor frame rate", "Cursor-Bildrate");
-        foreach (int rate in Preferences.FrameRates) fps.Items.Add($"{rate} FPS");
-        fps.SelectedIndex = Array.IndexOf(Preferences.FrameRates, preferences.Fps);
-        fps.SelectedIndexChanged += (_, _) => { preferences.Fps = timer.Fps = Preferences.FrameRates[fps.SelectedIndex]; Save(); };
-
-        shortcutEnabled = Switch("Keyboard shortcut", "Tastenkürzel", 24, 581, preferences.ShortcutEnabled, SetShortcutEnabled);
-        shortcutButton = new Button { Location = new Point(288, 574), Size = new Size(248, 36), FlatStyle = FlatStyle.Flat, BackColor = Color.White, Font = new Font("Segoe UI Semibold", 10), Enabled = preferences.ShortcutEnabled };
-        shortcutButton.FlatAppearance.BorderColor = Color.FromArgb(204, 204, 199);
-        shortcutButton.Click += (_, _) => { recording = !recording; ClearNotice(); UpdateShortcut(); };
-        shortcutButton.LostFocus += (_, _) => { if (recording) { recording = false; UpdateShortcut(); } };
-        Controls.Add(shortcutButton);
-        shortcutHint = LabelAt("", "", 24, 615, 512, 27); shortcutHint.Font = new Font("Segoe UI", 8.5f);
-        var languageLabel = LabelAt("Language", "Sprache", 24, 652);
-        var language = Combo(288, 646, 248, "Language", "Sprache");
-        language.Items.AddRange(["English", "Deutsch"]); language.SelectedIndex = German ? 1 : 0;
-        language.SelectedIndexChanged += (_, _) => { preferences.Language = language.SelectedIndex == 1 ? "de" : "en"; ApplyLanguage(); Save(); };
-
-        toggle = new Button { Location = new Point(24, 698), Size = new Size(300, 46), BackColor = Ink, ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 11, FontStyle.Bold) };
-        toggle.FlatAppearance.BorderSize = 0; toggle.Click += (_, _) => Toggle(); Controls.Add(toggle);
-        var hide = new Button { Location = new Point(336, 698), Size = new Size(200, 46), FlatStyle = FlatStyle.Flat };
-        TextFor(hide, "Minimize to tray", "In den Infobereich");
-        hide.FlatAppearance.BorderColor = Color.FromArgb(217, 217, 213); hide.Click += (_, _) => Hide(); Controls.Add(hide);
-        status = LabelAt("", "", 24, 758, 512, 27); status.Font = new Font("Segoe UI", 9);
-        var menu = new ContextMenuStrip();
-        trayOpen = new ToolStripMenuItem(); trayOpen.Click += (_, _) => { Show(); WindowState = FormWindowState.Normal; Activate(); };
-        trayToggle = new ToolStripMenuItem(); trayToggle.Click += (_, _) => Toggle();
-        trayExit = new ToolStripMenuItem(); trayExit.Click += (_, _) => Close();
-        menu.Items.AddRange([trayOpen, trayToggle, new ToolStripSeparator(), trayExit]);
-        tray = new NotifyIcon { Icon = Icon, ContextMenuStrip = menu, Visible = true };
-        tray.DoubleClick += (_, _) => { Show(); Activate(); };
-        // Keep cursor options on one page and installation/compatibility settings on another.
-        var tabs = new TabControl { Dock = DockStyle.Fill };
-        var cursorPage = new TabPage { BackColor = Paper, AutoScroll = true };
-        var systemPage = new TabPage { BackColor = Paper, AutoScroll = true };
-        translations.Add(() => { cursorPage.Text = T("Cursor", "Cursor"); systemPage.Text = T("System", "System"); });
-        tabs.TabPages.AddRange([cursorPage, systemPage]);
-        var footer = new Panel { Dock = DockStyle.Bottom, Height = 108, BackColor = Paper };
-        foreach (var control in new Control[] { toggle, hide, status })
-        { Controls.Remove(control); footer.Controls.Add(control); control.Top -= 682; }
-        var systemControls = new Control[] { shortcutEnabled, shortcutButton, shortcutHint, languageLabel, language };
-        foreach (Control control in Controls.Cast<Control>().ToArray())
-        {
-            Controls.Remove(control);
-            if (systemControls.Contains(control)) { systemPage.Controls.Add(control); control.Top -= 558; }
-            else { cursorPage.Controls.Add(control); if (control.Top >= 174) control.Top += 34; }
-        }
-        var directionLabel = LabelAt("Direction", "Ausrichtung", 24, 175, 120);
-        directionMode = Combo(150, 170, 386, "Direction style", "Art der Ausrichtung");
-        directionMode.SelectedIndexChanged += (_, _) => { if (!translating && directionMode.SelectedIndex >= 0) { preferences.Direction = (DirectionStyle)directionMode.SelectedIndex; Save(); } };
-        foreach (var control in new Control[] { directionLabel, directionMode })
-        { Controls.Remove(control); cursorPage.Controls.Add(control); }
-        CheckBox? startup = null;
-        bool startupOn = false;
-        try { startupOn = Startup.Enabled; } catch { }
-        startup = Switch("Start with Windows", "Mit Windows starten", 24, 150, startupOn, v =>
-        {
-            if (!persistSettings) return;
-            try { Startup.SetEnabled(v); ClearNotice(); }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or System.Security.SecurityException)
-            {
-                translating = true; startup!.Checked = !v; translating = false;
-                Notice("Windows startup could not be changed.", "Autostart konnte nicht geändert werden.");
-            }
-        }, 510);
-        var fullscreen = Switch("Use the app cursor in fullscreen apps", "In Vollbild-Apps deren eigenen Cursor verwenden", 24, 190, preferences.PauseFullscreen, v => preferences.PauseFullscreen = v, 510);
-        var exclusionsLabel = LabelAt("Excluded apps (e.g. game.exe; other.exe)", "Ausnahmen (z. B. spiel.exe; anderes.exe)", 24, 234, 510);
-        var exclusions = new TextBox { Location = new Point(24, 264), Size = new Size(505, 30), Text = preferences.ExcludedApps };
-        translations.Add(() => exclusions.AccessibleName = T("Excluded applications", "Ausgeschlossene Anwendungen"));
-        exclusions.TextChanged += (_, _) => { preferences.ExcludedApps = exclusions.Text; Save(); };
-        var compatibility = LabelAt("Start/search uses a static Windows cursor fallback. Other cursor apps may override it. Secure prompts use the system cursor. No additional cursor software is required.", "Start/Suche nutzt einen statischen Windows-Cursor-Fallback. Andere Cursor-Apps können ihn überschreiben. Geschützte Abfragen nutzen den Systemzeiger. Keine Zusatzsoftware nötig.", 24, 312, 505, 82);
-        compatibility.Font = new Font("Segoe UI", 9);
-        foreach (var control in new Control[] { startup, fullscreen, exclusionsLabel, exclusions, compatibility })
-        { Controls.Remove(control); systemPage.Controls.Add(control); }
-        var automaticUpdates = Switch("Check for updates automatically", "Automatisch nach Updates suchen", 24, 408, preferences.CheckUpdates, v => preferences.CheckUpdates = v, 505);
-        checkUpdateButton = new Button { Location = new Point(24, 448), Size = new Size(244, 36), FlatStyle = FlatStyle.Flat };
-        installUpdateButton = new Button { Location = new Point(284, 448), Size = new Size(244, 36), FlatStyle = FlatStyle.Flat, Enabled = false };
-        TextFor(checkUpdateButton, "Check for updates", "Nach Updates suchen");
-        TextFor(installUpdateButton, "Download and install", "Laden und installieren");
-        checkUpdateButton.Click += async (_, _) => await CheckForUpdates();
-        installUpdateButton.Click += async (_, _) => await InstallUpdate();
-        updateLabel = LabelAt($"Version {UpdateService.CurrentVersion}", $"Version {UpdateService.CurrentVersion}", 24, 496, 505, 64);
-        foreach (var control in new Control[] { automaticUpdates, checkUpdateButton, installUpdateButton, updateLabel })
-        { Controls.Remove(control); systemPage.Controls.Add(control); }
-        Controls.Add(tabs); Controls.Add(footer);
-        ApplyLanguage();
+        BuildInterface(); ApplyLanguage(); ApplyTheme();
         timer.Tick += (_, _) =>
         {
             if (quitSignal?.WaitOne(0) == true) { Close(); return; }
@@ -212,7 +69,9 @@ internal sealed class MainForm : Form
         Shown += (_, _) =>
         {
             var area = Screen.FromControl(this).WorkingArea;
+            MinimumSize = new Size(Math.Min(MinimumSize.Width, area.Width), Math.Min(MinimumSize.Height, area.Height));
             if (Height > area.Height) { Height = area.Height; Top = area.Top; }
+            if (Width > area.Width) { Width = area.Width; Left = area.Left; }
             shortcut = new GlobalShortcut(Handle);
             if (preferences.ShortcutEnabled && !shortcut.TrySet(preferences.ShortcutModifiers, preferences.ShortcutKey))
                 Notice("Shortcut unavailable. Click its keys to choose another.", "Kürzel belegt. Zum Ändern auf die Tastenkombination klicken.");
@@ -227,6 +86,8 @@ internal sealed class MainForm : Form
         try
         {
             foreach (var update in translations) update();
+            themeMode.Items.Clear(); themeMode.Items.AddRange(German ? ["System", "Hell", "Dunkel"] : ["System", "Light", "Dark"]);
+            themeMode.SelectedIndex = preferences.Theme == "dark" ? 2 : preferences.Theme == "light" ? 1 : 0;
             string[] styles = German ? ["Sinus-Easing", "Sanfte Feder", "Reaktionsschnell"] : ["Sine easing", "Soft spring", "Responsive"];
             positionMode.Items.Clear(); positionMode.Items.AddRange(styles); positionMode.SelectedIndex = (int)preferences.PositionMethod;
             effectsMode.Items.Clear(); effectsMode.Items.AddRange(styles); effectsMode.SelectedIndex = (int)preferences.EffectsMethod;
@@ -240,6 +101,7 @@ internal sealed class MainForm : Form
             trayToggle.Text = T("Toggle cursor", "Cursor umschalten");
             trayExit.Text = T("Exit and restore cursor", "Beenden und Cursor wiederherstellen");
             UpdateSmoothingHint(); UpdateShortcut(); UpdateStatus(); preview.Invalidate();
+            SelectPage(pageIndex);
         }
         finally { translating = false; }
     }
@@ -361,15 +223,18 @@ internal sealed class MainForm : Form
     private void PaintPreview(object? sender, PaintEventArgs e)
     {
         e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        using var grid = new SolidBrush(Color.FromArgb(62, 63, 65));
-        for (int y = 16; y < preview.Height - 30; y += 20) for (int x = 20; x < preview.Width; x += 20) e.Graphics.FillEllipse(grid, x, y, 2, 2);
+        float scale = preview.DeviceDpi / 96f;
+        e.Graphics.Clear(UiTheme.Canvas);
+        UiTheme.Fill(e.Graphics, new RectangleF(0, 0, preview.Width - 1, preview.Height - 1), 24 * scale, UiTheme.Soft);
+        using var grid = new SolidBrush(UiTheme.Line);
+        for (float y = 20 * scale; y < preview.Height - 40 * scale; y += 20 * scale)
+            for (float x = 20 * scale; x < preview.Width - 16 * scale; x += 20 * scale)
+                e.Graphics.FillEllipse(grid, x, y, scale, scale);
         using var image = renderer.Render(engine.Pose, preferences.Size);
-        e.Graphics.DrawImageUnscaled(image, preview.Width / 2 - image.Width / 2, (preview.Height - 25) / 2 - image.Height / 2);
-        using var font = new Font("Segoe UI", 8.5f);
-        using var brush = new SolidBrush(Color.FromArgb(185, 186, 188));
-        string text = T("Move your mouse · Left- or right-click to preview", "Maus bewegen · Links- oder Rechtsklick für die Vorschau");
-        var width = e.Graphics.MeasureString(text, font).Width;
-        e.Graphics.DrawString(text, font, brush, (preview.Width - width) / 2, preview.Height - 24);
+        e.Graphics.DrawImageUnscaled(image, preview.Width / 2 - image.Width / 2, (preview.Height - (int)(25 * scale)) / 2 - image.Height / 2);
+        TextRenderer.DrawText(e.Graphics, T("Move your mouse · Click to preview", "Maus bewegen · Klicken für die Vorschau"), Font,
+            new Rectangle(12, preview.Height - (int)(38 * scale), preview.Width - 24, (int)(28 * scale)), UiTheme.Muted,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
     }
     internal void StopCursor() => engine.Stop();
     internal void ActivateCursor() { if (!engine.Active) Toggle(); }
@@ -383,6 +248,7 @@ internal sealed class MainForm : Form
     }
     protected override void WndProc(ref Message m)
     {
+        if (m.Msg is 0x001A or 0x031A && preferences?.Theme == "system" && themeMode != null) ApplyTheme();
         if (m.Msg == 0x0312 && shortcut?.Id != 0 && m.WParam == shortcut?.Id && !recording && clock.Elapsed.TotalSeconds >= ignoreHotkeyUntil) Toggle();
         base.WndProc(ref m);
     }

@@ -8,6 +8,7 @@ internal sealed class Preferences : AnimationOptions
     public int Fps { get; set; } = 240;
     public bool AllPointers { get; set; }
     public string Language { get; set; } = "en";
+    public string Theme { get; set; } = "system";
     public bool CheckUpdates { get; set; } = true;
     public bool ShortcutEnabled { get; set; } = true;
     public uint ShortcutModifiers { get; set; } = 3;
@@ -24,6 +25,7 @@ internal sealed class Preferences : AnimationOptions
         value.Size = Math.Clamp(value.Size, 24, 64);
         if (!FrameRates.Contains(value.Fps)) value.Fps = 240;
         if (value.Language != "de") value.Language = "en";
+        if (value.Theme is not ("system" or "light" or "dark")) value.Theme = "system";
         if (!GlobalShortcut.Valid(value.ShortcutModifiers, value.ShortcutKey))
         { value.ShortcutModifiers = 3; value.ShortcutKey = (uint)Keys.C; }
         if (!Enum.IsDefined(value.PositionMethod)) value.PositionMethod = SmoothingMethod.Sine;

@@ -14,6 +14,8 @@ Versions before 1.2.0 need one manual installation of the new setup to gain the 
 
 ## Cursor options
 
+The settings window uses a desktop ChatGPT/Codex-inspired layout with separate **Cursor**, **Motion**, **Clicks** and **System** pages. Soft superellipse corners, quiet neutral surfaces, animated switches and shortcut keycaps are drawn natively. Choose **System**, **Light** or **Dark** under System → Appearance. The window resizes and scrolls to keep settings reachable on smaller screens. Existing preferences are retained.
+
 - Output rate: 60–360 FPS, 240 FPS by default.
 - Independent rotation, stretch, squash, after-wobble, left/right click bounce and click-ring switches.
 - **Keep small while pressed** replaces the brief click bounce with a held-down size effect: the cursor stays small until all enabled mouse buttons are released, then smoothly returns to normal. Left/right click switches still apply; click rings stay independent.
@@ -49,6 +51,8 @@ if ($p.ExitCode -ne 0) { throw 'Tests failed' }
 `--frame-test <folder>` measures application update timing, not monitor scanout. `--overlay-test <folder>` checks rendering and resource usage. `--smoke-test <file>` checks activation/restoration in an interactive Windows session. `--shell-test <folder>` temporarily tests native arrow/link replacement and restoration; run it with GPT Cursor paused. `--quit` gracefully closes the current instance; `--autostart` activates in the tray.
 
 `installer/Test-Setup.ps1` performs a temporary install/autostart/uninstall test and refuses to overwrite an existing installation or startup entry.
+
+`--ui-preview <folder>` renders each settings page in both languages and themes for visual review. `--ui-demo` opens an interactive preview with temporary preferences; it does not save settings or change startup registration.
 
 ## Releases
 

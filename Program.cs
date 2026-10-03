@@ -13,6 +13,13 @@ internal static class Program
         ApplicationConfiguration.Initialize();
         if (args.FirstOrDefault() == "--quit") return InstanceControl.Stop();
         if (args.FirstOrDefault() == "--self-test") return Checks.Run(args.ElementAtOrDefault(1) ?? "test-output");
+        if (args.FirstOrDefault() == "--ui-preview") return Checks.UiPreview(args.ElementAtOrDefault(1) ?? "test-output");
+        if (args.FirstOrDefault() == "--ui-demo")
+        {
+            using var demo = new MainForm(new Preferences { ShortcutEnabled = false }, persistSettings: false);
+            demo.Text = "GPT Cursor — UI preview";
+            Application.Run(demo); return 0;
+        }
         if (args.FirstOrDefault() == "--shell-test") return Checks.Shell(args.ElementAtOrDefault(1) ?? "test-output");
         if (args.FirstOrDefault() == "--snapshot") { Checks.Snapshot(args[1]); return 0; }
         if (args.FirstOrDefault() == "--overlay-test") return Checks.Overlay(args.ElementAtOrDefault(1) ?? "test-output");

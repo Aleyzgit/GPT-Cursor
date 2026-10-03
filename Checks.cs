@@ -5,6 +5,26 @@ namespace GPTCursor;
 
 internal static class Checks
 {
+    internal static int UiPreview(string output)
+    {
+        Directory.CreateDirectory(output);
+        foreach (string theme in new[] { "light", "dark" })
+        foreach (string language in new[] { "en", "de" })
+        {
+            using var form = new MainForm(new Preferences { Theme = theme, Language = language, ShortcutEnabled = false }, persistSettings: false);
+            form.ShowInTaskbar = false; form.StartPosition = FormStartPosition.Manual; form.Location = new Point(-12000, -12000);
+            form.Show();
+            for (int page = 0; page < 4; page++)
+            {
+                form.SelectPage(page); form.PerformLayout(); Application.DoEvents();
+                using var bitmap = new Bitmap(form.Width, form.Height);
+                form.DrawToBitmap(bitmap, new Rectangle(0, 0, bitmap.Width, bitmap.Height));
+                bitmap.Save(Path.Combine(output, $"{theme}-{language}-{page}.png"), ImageFormat.Png);
+            }
+            form.Close();
+        }
+        return 0;
+    }
     internal static int Shell(string output)
     {
         Directory.CreateDirectory(output);
@@ -312,6 +332,22 @@ internal static class Checks
                 smooth.Checked = false;
                 Check(!uiPreferences.PositionSmoothing && uiPreferences.EffectsSmoothing && !AllControls(form).OfType<ComboBox>().Single(c => c.AccessibleName == "Position smoothing style").Enabled,
                     "Positionsschalter deaktiviert nur seine Glättung und Auswahl");
+                var appearance = AllControls(form).OfType<ComboBox>().Single(c => c.AccessibleName == "Appearance");
+                appearance.SelectedIndex = 2;
+                Check(uiPreferences.Theme == "dark" && form.BackColor == Color.FromArgb(33, 33, 33), "Dunkelmodus aktualisiert Einstellungen und Oberfläche");
+                language.SelectedIndex = 1;
+                Check(appearance.Text == "Dunkel" && uiPreferences.Theme == "dark", "Sprachwechsel behält das gewählte Farbschema");
+                appearance.SelectedIndex = 1;
+                Check(uiPreferences.Theme == "light" && form.BackColor == Color.White, "Hellmodus wird sofort übernommen");
+                form.SelectPage(3);
+                language.SelectedIndex = 0;
+                Check(AllControls(form).OfType<Button>().Single(c => c.Text == "System").AccessibleDescription == "Selected", "Navigation behält die Seite beim Sprachwechsel");
+                form.ClientSize = new Size(800, 620); form.PerformLayout();
+                var updateAction = AllControls(form).OfType<Button>().Single(c => c.Text == "Check for updates");
+                Control? ancestor = updateAction;
+                while (ancestor != null && ancestor is not Panel { AutoScroll: true }) ancestor = ancestor.Parent;
+                Check(ancestor is Panel { AutoScroll: true } page && page.DisplayRectangle.Height > page.ClientSize.Height,
+                    "Kleines Fenster hält Updates in einer scrollbar erreichbaren Seite");
             }
             foreach (var profile in Enum.GetValues<SmoothingMethod>())
             {
