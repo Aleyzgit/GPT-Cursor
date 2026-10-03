@@ -10,6 +10,7 @@ internal sealed partial class MainForm
     private WebView2? browser;
     private bool browserReady;
     private bool micaAvailable;
+    private int? nativeWindowStyle;
     private double lastBrowserState;
     private string? lastBrowserJson;
     private readonly Dictionary<string, Control> browserControls = [];
@@ -58,6 +59,8 @@ internal sealed partial class MainForm
                 foreach (Control child in Controls) if (child != browser) child.Hide();
                 browser.Dock = DockStyle.None;
                 browser.Visible = true; browser.BringToFront();
+                nativeWindowStyle ??= GetWindowLong(Handle, -16);
+                SetWindowLong(Handle, -16, nativeWindowStyle.Value & ~0x00C00000); // custom caption; keep resize, taskbar and system-menu behavior
                 SetWindowPos(Handle, 0, 0, 0, 0, 0, 0x0027); // frame changed, no move/size/z-order
                 LayoutBrowser(); ApplyWindowMaterial(); SendBrowserState(force: true);
             };
@@ -72,12 +75,17 @@ internal sealed partial class MainForm
     {
         browserReady = false; browser?.Hide(); Padding = Padding.Empty;
         foreach (Control child in Controls) if (child != browser) child.Show();
+        if (nativeWindowStyle is int style) SetWindowLong(Handle, -16, style);
+        int standardFrame = 0; // DWMNCRP_USEWINDOWSTYLE
+        DwmSetWindowAttribute(Handle, 2, ref standardFrame, sizeof(int));
         SetWindowPos(Handle, 0, 0, 0, 0, 0, 0x0027);
         Notice("WebView2 is unavailable. The standard settings view is active.", "WebView2 ist nicht verfügbar. Die Standardansicht ist aktiv.");
     }
 
     private void ApplyWindowMaterial()
     {
+        int customFrame = 1; // DWMNCRP_DISABLED: do not composite a second caption over the web titlebar.
+        DwmSetWindowAttribute(Handle, 2, ref customFrame, sizeof(int));
         int dark = UiTheme.Dark ? 1 : 0;
         DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int));
         int backdrop = 2; // DWMSBT_MAINWINDOW (Mica), as used by the reference on Windows.
@@ -217,4 +225,6 @@ internal sealed partial class MainForm
     [StructLayout(LayoutKind.Sequential)] private struct GlassMargins { public int Left, Right, Top, Bottom; }
     [DllImport("dwmapi.dll")] private static extern int DwmExtendFrameIntoClientArea(nint window, ref GlassMargins margins);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(nint window, nint after, int x, int y, int cx, int cy, uint flags);
+    [DllImport("user32.dll", EntryPoint = "GetWindowLongW")] private static extern int GetWindowLong(nint window, int index);
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongW")] private static extern int SetWindowLong(nint window, int index, int value);
 }

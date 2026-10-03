@@ -25,6 +25,11 @@ internal sealed partial class MainForm
             await browser!.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, file);
         }
         await Task.Delay(400);
+        if ((GetWindowLong(Handle, -16) & 0x00C00000) != 0) throw new InvalidOperationException("Native caption overlaps custom window controls");
+        report.Add("PASS: Native caption removed while the custom titlebar is active");
+        if (ReadWindowAttribute(Handle, 1, out int nativeFrame, sizeof(int)) != 0 || nativeFrame != 0)
+            throw new InvalidOperationException("DWM still draws a native caption over the custom titlebar");
+        report.Add("PASS: DWM native frame rendering is disabled for the web interface");
         if (browser!.Width < ClientSize.Width - 24) throw new InvalidOperationException("Browser does not cover the full client area");
         report.Add("PASS: Browser covers the full client area without legacy layout gutters");
         ClientSize = new Size(1200, 800);
@@ -67,6 +72,13 @@ internal sealed partial class MainForm
         await Capture("dark-de-motion-compact");
         await Check("getComputedStyle(document.querySelector('.surface')).backgroundColor !== getComputedStyle(document.querySelector('.sidebar')).backgroundColor", "Sidebar and main surface retain distinct layers");
         await Check("getComputedStyle(document.body).backgroundImage.includes('gradient')", "Outer background gradient present");
+        UseNativeInterface();
+        if ((GetWindowLong(Handle, -16) & 0x00C00000) == 0 || browserReady || browser!.Visible)
+            throw new InvalidOperationException("Native fallback did not restore its standard window frame");
+        report.Add("PASS: Native fallback restores the standard window caption");
         File.WriteAllLines(Path.Combine(output, "checks.txt"), report);
     }
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+    private static extern int ReadWindowAttribute(nint window, int attribute, out int value, int size);
 }
