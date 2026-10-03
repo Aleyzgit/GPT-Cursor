@@ -8,13 +8,15 @@ A Windows cursor overlay inspired by the ChatGPT/Codex computer-use cursor, with
 
 Run `GPT-Cursor-Setup-<version>.exe`. The installer includes the .NET runtime and installs for the current user. Windows Settings → Installed apps → GPT Cursor removes it. Startup and desktop shortcuts are optional.
 
+The settings interface uses Microsoft WebView2. If that runtime is absent, setup runs the bundled, Microsoft-signed bootstrapper (internet required for that first runtime installation). On systems where WebView2 cannot start, a native settings view remains available. The shared WebView2 runtime is not removed when GPT Cursor is uninstalled. [Microsoft deployment documentation](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution).
+
 In **System**, use **Check for updates** and **Download and install**. Automatic checks run shortly after launch and every six hours while enabled. Only newer stable GitHub releases are offered. The setup is downloaded over HTTPS from this repository and verified against the SHA-256 digest returned by GitHub before launch. Installation is initiated by the user; no silent background replacement. Existing installed settings and startup choices are retained.
 
 Versions before 1.2.0 need one manual installation of the new setup to gain the updater. Updating from a portable copy installs the normal edition; existing installed preferences take priority, otherwise portable preferences are imported.
 
 ## Cursor options
 
-The settings window uses a desktop ChatGPT/Codex-inspired layout with separate **Cursor**, **Motion**, **Clicks** and **System** pages. Soft superellipse corners, quiet neutral surfaces, animated switches and shortcut keycaps are drawn natively. Choose **System**, **Light** or **Dark** under System → Appearance. The window resizes and scrolls to keep settings reachable on smaller screens. Existing preferences are retained.
+The settings window uses a Chromium-rendered interface with separate **Cursor**, **Motion**, **Clicks** and **System** pages. Three layers separate the Windows Mica backdrop (where supported), translucent sidebar and rounded foreground surface. Local OpenAI Sans fonts, CSS superellipse corners, custom dropdowns, animated switches and shortcut keycaps follow the inspected desktop styles. Choose **System**, **Light** or **Dark** under System → Appearance. The window resizes and scrolls to keep settings reachable on smaller screens. Existing preferences are retained. The cursor engine remains native and independent of the UI renderer.
 
 - Output rate: 60–360 FPS, 240 FPS by default.
 - Independent rotation, stretch, squash, after-wobble, left/right click bounce and click-ring switches.
@@ -52,7 +54,7 @@ if ($p.ExitCode -ne 0) { throw 'Tests failed' }
 
 `installer/Test-Setup.ps1` performs a temporary install/autostart/uninstall test and refuses to overwrite an existing installation or startup entry.
 
-`--ui-preview <folder>` renders each settings page in both languages and themes for visual review. `--ui-demo` opens an interactive preview with temporary preferences; it does not save settings or change startup registration.
+`--ui-preview <folder>` renders the native fallback pages for visual review. `--ui-demo` opens the Chromium interface with temporary preferences; it does not save settings or change startup registration. `--web-test <folder>` runs an integration check against the embedded WebView2, verifies that UI controls change the native settings, and captures light/dark and compact-layout screenshots. `--ui-model <file>` exports the settings schema for isolated frontend testing.
 
 ## Releases
 
@@ -62,4 +64,4 @@ The app and setup are currently unsigned. Windows may show an unknown-publisher 
 
 ## Attribution
 
-This is an unofficial personal utility. The cursor bitmap was extracted from the locally installed OpenAI desktop app; no ownership or open-source license for that asset is claimed. See [SOURCES.md](SOURCES.md) for precise provenance and differences. The app's original agent paths are adapted to physical mouse movement; the added click animations, smoothing, direction tracking and updater are independent implementations.
+This is an unofficial personal utility. The cursor bitmap and OpenAI Sans font files were extracted from the locally installed OpenAI desktop app; no ownership or open-source license for those assets is claimed. See [SOURCES.md](SOURCES.md) for precise provenance and differences. The app's original agent paths are adapted to physical mouse movement; the added click animations, smoothing, direction tracking and updater are independent implementations.

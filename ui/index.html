@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>GPT Cursor</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="titlebar">
+    <span class="app-name">GPT Cursor</span>
+    <div class="window-actions">
+      <button data-window="minimize" aria-label="Minimize"><svg viewBox="0 0 16 16"><path d="M3 8.5h10"/></svg></button>
+      <button data-window="maximize" aria-label="Maximize / restore"><svg viewBox="0 0 16 16"><rect x="3.5" y="3.5" width="9" height="9" rx=".5"/></svg></button>
+      <button data-window="close" aria-label="Close"><svg viewBox="0 0 16 16"><path d="m3.5 3.5 9 9m0-9-9 9"/></svg></button>
+    </div>
+  </header>
+  <div class="workspace">
+    <aside class="sidebar">
+      <div id="settings-label" class="sidebar-title">Settings</div>
+      <nav id="navigation" aria-label="Settings"></nav>
+      <div class="sidebar-footer"><span id="version"></span><button id="tray" class="icon-button" title="Minimize to tray" aria-label="Minimize to tray"><svg viewBox="0 0 24 24"><path d="M5 15v4h14v-4M12 4v10m-4-4 4 4 4-4"/></svg></button></div>
+    </aside>
+    <main class="surface">
+      <header class="page-header"><h1 id="page-title">Cursor</h1></header>
+      <div id="page-scroll" class="page-scroll"><div id="page-content" class="page-content"></div></div>
+      <footer class="footer"><span id="status" role="status"></span><button id="activation" class="button primary"></button></footer>
+    </main>
+  </div>
+</body>
+</html>

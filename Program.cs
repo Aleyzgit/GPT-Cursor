@@ -14,9 +14,15 @@ internal static class Program
         if (args.FirstOrDefault() == "--quit") return InstanceControl.Stop();
         if (args.FirstOrDefault() == "--self-test") return Checks.Run(args.ElementAtOrDefault(1) ?? "test-output");
         if (args.FirstOrDefault() == "--ui-preview") return Checks.UiPreview(args.ElementAtOrDefault(1) ?? "test-output");
+        if (args.FirstOrDefault() == "--ui-model")
+        {
+            using var model = new MainForm(new Preferences { ShortcutEnabled = false }, persistSettings: false);
+            File.WriteAllText(args[1], model.BrowserModelJson()); return 0;
+        }
+        if (args.FirstOrDefault() == "--web-test") return Checks.WebInterface(args.ElementAtOrDefault(1) ?? "test-output/web-ui");
         if (args.FirstOrDefault() == "--ui-demo")
         {
-            using var demo = new MainForm(new Preferences { ShortcutEnabled = false }, persistSettings: false);
+            using var demo = new MainForm(new Preferences { ShortcutEnabled = false }, persistSettings: false, browserInterface: true);
             demo.Text = "GPT Cursor — UI preview";
             Application.Run(demo); return 0;
         }

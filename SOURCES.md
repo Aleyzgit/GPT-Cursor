@@ -44,6 +44,24 @@ Read-only analysiert: `OpenAI.Codex_26.930.3930.0_x64__2p2nqsd0c76g0/app/resourc
 
 Die Oberfläche ist eine eigene WinForms-Implementierung. `UiKit.cs` bildet geglättete Ecken durch abgetastete Superellipsen nach; Schalter bewegen sich über 150 ms. Schrift ist Segoe UI, Dropdown-Popups und Fensterrahmen bleiben Windows-nativ. Navigation, Vorschau und Einstellungsgruppen sind für GPT Cursor gestaltet. Kein CSS, JavaScript oder proprietärer Font der Desktop-App wird mitgeliefert. Die UI ist eine Annäherung an die untersuchte App, keine pixelidentische Kopie.
 
+## Dreischichtige Chromium-Oberfläche ab 1.7.0
+
+Die Standardoberfläche verwendet jetzt WebView2. Die oben beschriebene WinForms-Ansicht bleibt als Fallback für eine nicht verfügbare Laufzeit erhalten.
+
+Zusätzlich read-only analysiert aus derselben App-Version:
+
+- `.vite/build/main-C_jM0dPl.js`: Windows-Fenster verwenden bei aktivierter Transparenz `backgroundMaterial: mica` sowie eine verdeckte native Titelleiste mit Fensterbuttons.
+- `app-initial-74dc12f48352.js`: getrennte Theme-Werte für Surface, Surface-under, Panel und Controls. Die konkrete Darstellung hängt auch vom gewählten App-Theme ab.
+- `app-shared-6fb15e58cd7f.css`: UI-Skala (14 px Grundschrift, 400/500/600 Gewichte), geglättete Ecken, transparente Flächen und Trennlinien.
+- `OpenAISans-Regular-c56711d328c4.woff2`, `OpenAISans-Medium-7b9c963f9063.woff2`, `OpenAISans-Semibold-e259229c5327.woff2`: unveränderte lokale Schriftdateien unter `ui/fonts/`. Eigentum und Rechte verbleiben beim jeweiligen Rechteinhaber; keine eigene Open-Source-Lizenz wird für diese Assets beansprucht.
+
+HTML/CSS/JavaScript in `ui/` sind eine eigene Implementierung für die Cursor-Einstellungen. Die äußere Ebene verwendet Mica, wo Windows es unterstützt, mit einer dezenten Verlaufstönung; darüber liegen eine transparente Sidebar und die deckende Hauptfläche. Rundungen verwenden direkt CSS `corner-shape: superellipse(1.5)` mit Rundungs-Fallback für ältere WebView2-Versionen. Schrift und Dropdowns werden mit Chromium statt GDI gezeichnet. Der Cursor-Prozess und seine Physik bleiben unverändert. Die Oberfläche lädt lokale Assets; fremde Navigation und Seitenberechtigungen sind gesperrt. Änderungen gehen nur über bekannte Einstellungs-IDs an die vorhandenen nativen Handler.
+
+Ein pixelidentischer Vergleich mit einer konkreten geöffneten Referenzansicht wurde nicht durchgeführt. Mica, App-Themes, Betriebssystem und Skalierung beeinflussen die endgültigen Pixel.
+
+- https://learn.microsoft.com/en-us/windows/win32/api/dwmapi/ne-dwmapi-dwm_systembackdrop_type
+- https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution
+
 ## Windows-Schnittstellen
 
 Die separat schaltbaren Klickanimationen (420 ms, Einfedern, Einzel-/Doppelring) sind eigene Ergänzungen. Der hochauflösende Frame-Timer ist ebenfalls eine native Ergänzung; Standardziel sind 240 FPS. Die aus der App übernommenen Federparameter bleiben unverändert.

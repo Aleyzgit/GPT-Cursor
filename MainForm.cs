@@ -34,7 +34,7 @@ internal sealed partial class MainForm : Form
     private bool German => preferences.Language == "de";
     private string T(string english, string german) => German ? german : english;
 
-    internal MainForm(Preferences? initialPreferences = null, bool persistSettings = true)
+    internal MainForm(Preferences? initialPreferences = null, bool persistSettings = true, bool? browserInterface = null)
     {
         preferences = initialPreferences ?? Preferences.Load();
         this.persistSettings = persistSettings;
@@ -60,7 +60,7 @@ internal sealed partial class MainForm : Form
                 engine.Tick(now - lastTime);
                 if (!hadConflict && engine.ShellConflict) UpdateStatus();
                 if (now - lastPreview >= 1.0 / 60 && Visible && WindowState != FormWindowState.Minimized)
-                { preview.Invalidate(); lastPreview = now; }
+                { if (browserReady) SendBrowserFrame(now); else preview.Invalidate(); lastPreview = now; }
             }
             catch (Exception e) { HandleError(e); }
             lastTime = now;
@@ -76,6 +76,7 @@ internal sealed partial class MainForm : Form
             if (preferences.ShortcutEnabled && !shortcut.TrySet(preferences.ShortcutModifiers, preferences.ShortcutKey))
                 Notice("Shortcut unavailable. Click its keys to choose another.", "Kürzel belegt. Zum Ändern auf die Tastenkombination klicken.");
             timer.Start(); Save();
+            if (browserInterface ?? persistSettings) _ = StartBrowserInterface();
         };
         Deactivate += (_, _) => { if (recording) { recording = false; UpdateShortcut(); } };
         ResumeLayout(true);
@@ -248,6 +249,17 @@ internal sealed partial class MainForm : Form
     }
     protected override void WndProc(ref Message m)
     {
+        if (browserReady && m.Msg == 0x0083 && m.WParam != 0) { m.Result = 0; return; }
+        if (browserReady && m.Msg == 0x0084 && WindowState != FormWindowState.Maximized)
+        {
+            long coordinates = m.LParam.ToInt64();
+            var point = PointToClient(new Point((short)(coordinates & 0xffff), (short)((coordinates >> 16) & 0xffff)));
+            int edge = Math.Max(4, (int)(6 * DeviceDpi / 96f));
+            bool left = point.X < edge, right = point.X >= ClientSize.Width - edge;
+            bool top = point.Y < edge, bottom = point.Y >= ClientSize.Height - edge;
+            int hit = top ? left ? 13 : right ? 14 : 12 : bottom ? left ? 16 : right ? 17 : 15 : left ? 10 : right ? 11 : 1;
+            if (hit != 1) { m.Result = hit; return; }
+        }
         if (m.Msg is 0x001A or 0x031A && preferences?.Theme == "system" && themeMode != null) ApplyTheme();
         if (m.Msg == 0x0312 && shortcut?.Id != 0 && m.WParam == shortcut?.Id && !recording && clock.Elapsed.TotalSeconds >= ignoreHotkeyUntil) Toggle();
         base.WndProc(ref m);
@@ -262,6 +274,7 @@ internal sealed partial class MainForm : Form
         if (!closing)
         {
             closing = true; timer.Stop(); shortcut?.Dispose();
+            browser?.Dispose();
             updateCancellation.Cancel(); updates.Dispose();
             engine.Dispose(); renderer.Dispose(); tray.Visible = false; tray.Dispose(); timer.Dispose();
             quitSignal?.Dispose();

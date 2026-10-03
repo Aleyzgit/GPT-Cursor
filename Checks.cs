@@ -5,6 +5,20 @@ namespace GPTCursor;
 
 internal static class Checks
 {
+    internal static int WebInterface(string output)
+    {
+        Directory.CreateDirectory(output);
+        int result = 1;
+        using var form = new MainForm(new Preferences { ShortcutEnabled = false }, persistSettings: false, browserInterface: true)
+        { ShowInTaskbar = false, StartPosition = FormStartPosition.Manual, Location = new Point(-12000, -12000) };
+        form.Shown += async (_, _) =>
+        {
+            try { await form.CheckBrowserInterface(output); result = 0; }
+            catch (Exception e) { File.WriteAllText(Path.Combine(output, "failure.txt"), e.ToString()); }
+            finally { form.Close(); }
+        };
+        Application.Run(form); return result;
+    }
     internal static int UiPreview(string output)
     {
         Directory.CreateDirectory(output);
@@ -348,6 +362,20 @@ internal static class Checks
                 while (ancestor != null && ancestor is not Panel { AutoScroll: true }) ancestor = ancestor.Parent;
                 Check(ancestor is Panel { AutoScroll: true } page && page.DisplayRectangle.Height > page.ClientSize.Height,
                     "Kleines Fenster hält Updates in einer scrollbar erreichbaren Seite");
+                using var browserModel = System.Text.Json.JsonDocument.Parse(form.BrowserModelJson());
+                var browserFields = browserModel.RootElement.GetProperty("pages").EnumerateArray()
+                    .SelectMany(p => p.GetProperty("rows").EnumerateArray())
+                    .Where(r => r.TryGetProperty("controls", out _))
+                    .SelectMany(r => r.GetProperty("controls").EnumerateArray()).ToArray();
+                Check(browserFields.Length == 28, "Web-Oberfläche stellt alle 28 Einstellungsfelder und Aktionen bereit");
+                string sizeId = browserFields.Single(c => c.GetProperty("type").GetString() == "range").GetProperty("id").GetString()!;
+                form.HandleBrowserCommand(System.Text.Json.JsonSerializer.Serialize(new { action = "change", id = sizeId, value = 999 }));
+                Check(uiPreferences.Size == 44, "Web-Brücke verwirft Größen außerhalb des erlaubten Bereichs");
+                string directionId = browserFields.Single(c => c.GetProperty("text").GetString() == "Direction style").GetProperty("id").GetString()!;
+                form.HandleBrowserCommand(System.Text.Json.JsonSerializer.Serialize(new { action = "change", id = directionId, value = -1 }));
+                Check(uiPreferences.Direction == DirectionStyle.Original, "Web-Brücke verwirft ungültige Auswahlindizes");
+                form.HandleBrowserCommand("{\"action\":\"change\",\"id\":\"not-a-control\",\"value\":false}");
+                Check(uiPreferences.ClickPulse, "Unbekannte Web-IDs ändern keine Einstellungen");
             }
             foreach (var profile in Enum.GetValues<SmoothingMethod>())
             {

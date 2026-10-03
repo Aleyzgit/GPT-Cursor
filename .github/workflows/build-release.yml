@@ -30,6 +30,13 @@ jobs:
           $test = Start-Process -FilePath '.\bin\Release\net10.0-windows\GPT Cursor.exe' -ArgumentList '--self-test test-output\ci' -Wait -PassThru
           Get-Content test-output\ci\checks.txt
           if ($test.ExitCode -ne 0) { throw 'Tests failed.' }
+      - name: Test Chromium settings interface
+        shell: pwsh
+        run: |
+          $test = Start-Process -FilePath '.\bin\Release\net10.0-windows\GPT Cursor.exe' -ArgumentList '--web-test test-output\web-ui' -Wait -PassThru
+          if (Test-Path test-output\web-ui\failure.txt) { Get-Content test-output\web-ui\failure.txt }
+          if ($test.ExitCode -ne 0) { throw 'Web interface tests failed.' }
+          Get-Content test-output\web-ui\checks.txt
       - name: Set up verified Inno Setup compiler
         shell: pwsh
         run: |

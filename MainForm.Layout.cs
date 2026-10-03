@@ -20,7 +20,7 @@ internal sealed partial class MainForm
         UiButton Button(string en, string de, EventHandler action)
         {
             var b = new UiButton { Height = 40, Dock = DockStyle.Fill, Margin = Padding.Empty };
-            Translate(b, en, de); b.Click += action; return b;
+            Translate(b, en, de); b.Click += action; browserActions[b] = () => action(b, EventArgs.Empty); return b;
         }
         UiSelect Select(string en, string de)
         {

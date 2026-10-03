@@ -5,6 +5,15 @@ if (-not $Compiler) { $Compiler = Join-Path $projectRoot 'build-tools\inno\ISCC.
 if (-not (Test-Path -LiteralPath $Compiler)) { throw 'Install Inno Setup 6 and pass -Compiler with the path to ISCC.exe.' }
 Push-Location $projectRoot
 try {
+    $bootstrapper = Join-Path $projectRoot 'build-tools\MicrosoftEdgeWebview2Setup.exe'
+    if (-not (Test-Path -LiteralPath $bootstrapper)) {
+        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $bootstrapper) | Out-Null
+        Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $bootstrapper
+    }
+    $signature = Get-AuthenticodeSignature -LiteralPath $bootstrapper
+    if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notlike '*O=Microsoft Corporation*') {
+        throw 'WebView2 bootstrapper signature invalid.'
+    }
     dotnet publish GPTCursor.csproj -c Release -r win-x64 --self-contained true -o 'dist\package' --nologo
     if ($LASTEXITCODE -ne 0) { throw 'Application publish failed.' }
     $version = ([xml](Get-Content 'GPTCursor.csproj' -Raw)).Project.PropertyGroup.Version

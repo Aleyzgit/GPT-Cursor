@@ -34,6 +34,8 @@ english.Desktop=Create a desktop shortcut
 german.Desktop=Desktop-Verknüpfung erstellen
 english.Launch=Launch GPT Cursor
 german.Launch=GPT Cursor starten
+english.WebView=Installing Microsoft WebView2 for the settings interface...
+german.WebView=Microsoft WebView2 für die Einstellungsoberfläche wird installiert...
 
 [Tasks]
 Name: "startup"; Description: "{cm:Startup}"; Flags: unchecked
@@ -44,6 +46,7 @@ Source: "..\dist\package\*"; DestDir: "{app}"; Excludes: "settings.json,*.pdb,in
 Source: "installed.flag"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\SOURCES.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build-tools\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedsWebView2
 
 [Icons]
 Name: "{group}\GPT Cursor"; Filename: "{app}\GPT Cursor.exe"; Parameters: "--activate"
@@ -54,6 +57,7 @@ Name: "{autodesktop}\GPT Cursor"; Filename: "{app}\GPT Cursor.exe"; Parameters: 
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GPTCursor"; ValueData: """{app}\GPT Cursor.exe"" --autostart"; Tasks: startup; Flags: uninsdeletevalue
 
 [Run]
+Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "{cm:WebView}"; Flags: runhidden waituntilterminated; Check: NeedsWebView2
 Filename: "{app}\GPT Cursor.exe"; Parameters: "--activate"; Description: "{cm:Launch}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
@@ -62,6 +66,19 @@ Filename: "{app}\GPT Cursor.exe"; Parameters: "--quit"; Flags: runhidden waitunt
 [Code]
 var
   StartupInitialized: Boolean;
+
+function WebViewVersionPresent(RootKey: Integer): Boolean;
+var
+  Version: String;
+begin
+  Result := RegQueryStringValue(RootKey, 'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}', 'pv', Version)
+    and (Version <> '') and (Version <> '0.0.0.0');
+end;
+
+function NeedsWebView2(): Boolean;
+begin
+  Result := not (WebViewVersionPresent(HKCU32) or WebViewVersionPresent(HKLM32) or WebViewVersionPresent(HKCU64));
+end;
 
 procedure InitializeStartupChoice();
 var
