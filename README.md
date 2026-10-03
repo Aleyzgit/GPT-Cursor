@@ -23,9 +23,9 @@ Versions before 1.2.0 need one manual installation of the new setup to gain the 
 
 ## Compatibility
 
-MouseX can stay running. The overlay uses `MagShowSystemCursor` and does not replace system cursor images.
+GPT Cursor is standalone: MouseX and other cursor utilities are not required. The desktop overlay uses Windows' `MagShowSystemCursor` API. While Start/search is in the foreground, the app supplies its resting artwork as the Windows arrow/link cursor, restoring the previous images on leaving the shell or stopping the app. It retries once if Windows reloads the cursor during the transition, then reports an override in the status line instead of repeatedly fighting another cursor owner. A newly selected third-party cursor image is preserved on normal exit from the shell.
 
-Windows shell surfaces such as Start and the secure UAC desktop use the native Windows/MouseX cursor. A normal overlay cannot display its own cursor on the protected UAC desktop. No Windows security policies or certificate stores are changed.
+This native fallback is static; direction/stretch/click animation resumes on the desktop. Other cursor utilities can override the fallback, so the GPT pointer in Start/search is not guaranteed while another utility controls Windows cursor images. Pausing a skin may not stop that utility from rewriting the images. The protected UAC desktop still uses its own system cursor. No Windows security policies, certificate stores or saved cursor scheme settings are changed by the app.
 
 Fullscreen applications use their own cursor by default. Windowed games with software cursors can be excluded by executable name under **System**, for example `game.exe; javaw.exe`. Automatic detection cannot cover every custom game cursor. There is no game injection or anti-cheat integration.
 
@@ -46,7 +46,7 @@ if ($p.ExitCode -ne 0) { throw 'Tests failed' }
 .\installer\Build-Setup.ps1 -Compiler 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
 ```
 
-`--frame-test <folder>` measures application update timing, not monitor scanout. `--overlay-test <folder>` checks rendering and resource usage. `--smoke-test <file>` checks activation/restoration in an interactive Windows session. `--quit` gracefully closes the current instance; `--autostart` activates in the tray.
+`--frame-test <folder>` measures application update timing, not monitor scanout. `--overlay-test <folder>` checks rendering and resource usage. `--smoke-test <file>` checks activation/restoration in an interactive Windows session. `--shell-test <folder>` temporarily tests native arrow/link replacement and restoration; run it with GPT Cursor paused. `--quit` gracefully closes the current instance; `--autostart` activates in the tray.
 
 `installer/Test-Setup.ps1` performs a temporary install/autostart/uninstall test and refuses to overwrite an existing installation or startup entry.
 

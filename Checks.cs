@@ -5,6 +5,65 @@ namespace GPTCursor;
 
 internal static class Checks
 {
+    internal static int Shell(string output)
+    {
+        Directory.CreateDirectory(output);
+        string Fingerprint(uint role)
+        {
+            if (!Native.GetIconInfo(Native.LoadCursor(0, (nint)role), out var info)) throw new InvalidOperationException("Missing cursor.");
+            try
+            {
+                using var bytes = new MemoryStream();
+                using (var writer = new BinaryWriter(bytes, System.Text.Encoding.UTF8, true)) { writer.Write(info.XHotspot); writer.Write(info.YHotspot); }
+                foreach (nint handle in new[] { info.Color, info.Mask }.Where(h => h != 0))
+                { using var bitmap = Bitmap.FromHbitmap(handle); bitmap.Save(bytes, ImageFormat.Png); }
+                return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes.ToArray()));
+            }
+            finally { Native.DeleteObject(info.Color); Native.DeleteObject(info.Mask); }
+        }
+        using var renderer = new CursorRenderer();
+        using var shell = new ShellCursor();
+        try
+        {
+            string arrow = Fingerprint(Native.Arrow), hand = Fingerprint(Native.Hand);
+            int before = Native.InstallCount;
+            try
+            {
+                shell.Show(renderer, 40, 0);
+                if (Fingerprint(Native.Arrow) == arrow) throw new InvalidOperationException("Shell artwork was not installed.");
+                for (int i = 0; i < 100; i++) shell.Show(renderer, 40, i);
+                if (Native.InstallCount - before != 2) throw new InvalidOperationException("Repeated native replacement during shell movement.");
+            }
+            finally { shell.Restore(); }
+            if (Fingerprint(Native.Arrow) != arrow || Fingerprint(Native.Hand) != hand) throw new InvalidOperationException("Original pointer images were not restored exactly.");
+            nint backup = Native.CopyIcon(Native.LoadCursor(0, (nint)Native.Arrow));
+            using var replacementBitmap = renderer.Render(new Pose(90, 1, 1, 0), 32);
+            nint replacement = CursorRenderer.CreateCursor(replacementBitmap);
+            try
+            {
+                shell.Show(renderer, 40, 0);
+                Native.Install(Native.CopyIcon(replacement), Native.Arrow);
+                string foreign = Fingerprint(Native.Arrow);
+                shell.Show(renderer, 40, 250);
+                if (Fingerprint(Native.Arrow) == foreign || shell.Overridden) throw new InvalidOperationException("A single scheme reset was not recovered.");
+                Native.Install(Native.CopyIcon(replacement), Native.Arrow);
+                int installed = Native.InstallCount;
+                for (int i = 500; i < 5000; i += 10) shell.Show(renderer, 40, i);
+                if (!shell.Overridden || installed != Native.InstallCount) throw new InvalidOperationException("Persistent cursor owner conflict was not reported without repeated replacement.");
+                shell.Restore();
+                if (Fingerprint(Native.Arrow) != foreign || Fingerprint(Native.Hand) != hand) throw new InvalidOperationException("Restoration overwrote another owner's cursor.");
+            }
+            finally
+            {
+                shell.Restore();
+                Native.Install(backup, Native.Arrow);
+                Native.DestroyCursor(replacement);
+            }
+            File.WriteAllText(Path.Combine(output, "shell.txt"), "PASS: native artwork and exact restoration; unchanged frames do not replace cursors; one reset is recovered; persistent overrides are reported without a replacement loop; another owner's image survives shell exit.");
+            return 0;
+        }
+        catch (Exception e) { File.WriteAllText(Path.Combine(output, "shell.txt"), "FAIL: " + e); return 1; }
+    }
     private static IEnumerable<Control> AllControls(Control parent) => parent.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(AllControls(c)));
     internal static int Overlay(string output)
     {
@@ -81,6 +140,35 @@ internal static class Checks
             results.RemoveAll(s => s == "PASS: Richtung bleibt bei Stillstand und Ein-Pixel-Zittern exakt stabil");
             results.Add("PASS: Kein Nachdrehen bei Stillstand oder Ein-Pixel-Zittern");
             CheckReturningDirection(Check);
+            var reversing = new HeadingTracker();
+            for (int i = 0; i <= 100; i += 4) reversing.Update(-i, 0);
+            double reverseAngle = 0;
+            for (int i = 1; i <= 3; i++) reverseAngle = reversing.Update(-100 + i * 4, 0);
+            Check(Math.Abs(((reverseAngle - 135 + 180) % 360 + 360) % 360 - 180) < 20,
+                "Abrupte Umkehr verwirft den alten Bewegungspfad innerhalb von zwölf Pixeln");
+            var axisFilter = new CursorSmoothing(); axisFilter.Reset(0, 0);
+            var axisOptions = new AnimationOptions { EffectsSmoothing = true, EffectsMethod = SmoothingMethod.Spring };
+            for (int i = 0; i < 120; i++) axisFilter.Effects(new Pose(0, .7, .85, 0), 1.0 / 240, axisOptions);
+            double axisExcursion = 0;
+            for (int i = 0; i < 120; i++) axisExcursion = Math.Max(axisExcursion, Math.Abs(axisFilter.Effects(new Pose(0, .7, .85, 180), 1.0 / 240, axisOptions).Axis));
+            Check(axisExcursion < .001, "Verformungsachse bleibt bei einer 180°-Umkehr stabil");
+            foreach (int fps in new[] { 60, 240, 360 })
+            {
+                var quick = new Motion(); var filter = new CursorSmoothing(); filter.Reset(0, 0);
+                var config = new AnimationOptions { Direction = DirectionStyle.ReturnToRest, EffectsSmoothing = true, Wobble = false };
+                Pose pose = default;
+                double x = 0, biggest = 0, last = 0;
+                for (int i = 0; i < fps * 4; i++)
+                {
+                    x += (i / (fps / 4) % 2 == 0 ? 1 : -1) * 1200.0 / fps;
+                    pose = filter.Effects(quick.Update(x, 0, 1.0 / fps, config), 1.0 / fps, config);
+                    biggest = Math.Max(biggest, Math.Abs(pose.Rotation - last)); last = pose.Rotation;
+                    if (Math.Abs(pose.Axis - (pose.Rotation - 135)) > .001) throw new InvalidOperationException("Verformung löst sich von der Cursor-Richtung.");
+                }
+                Check(biggest < 75, $"Schnelle Links-Rechts-Wechsel ohne Winkelsprünge bei {fps} FPS");
+            }
+            Check(!DesktopPolicy.IsShell("game", "Windows.UI.Core.CoreWindow") && !DesktopPolicy.IsShell("game", "XamlExplorerHostIslandWindow"),
+                "Spiele werden anhand ihrer Fensterklasse nicht als Startmenü behandelt");
             Check(DesktopPolicy.IsShell("StartMenuExperienceHost", "") && !DesktopPolicy.IsShell("game", "GameWindow"), "Startmenü wird vom Spiel unterschieden");
             Check(DesktopPolicy.Excluded("Game", "other.exe; GAME.exe") && !DesktopPolicy.Excluded("Game2", "game.exe"), "Spieleausnahmen vergleichen exakte Prozessnamen");
             Check(DesktopPolicy.Covers(new Rectangle(-1920, 0, 1920, 1080), new Rectangle(-1920, 0, 1920, 1080)), "Vollbild-Erkennung auf zweitem Monitor");

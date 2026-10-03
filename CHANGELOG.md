@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+
+- Discard the old movement trail on a sharp reversal and stabilize the return turn target.
+- Keep deformation aligned with the arrow and avoid rotating the squash axis during left/right reversals.
+- Add a standalone static Windows cursor fallback in Start/search, with restoration outside the shell and one retry after a reset. Report persistent overrides instead of fighting other cursor utilities; game exclusions and the secure-desktop fallback remain in place.
+
 ## 1.4.0
 
 - Add optional "Keep small while pressed" for left/right clicks, with a smooth return to normal size on release.

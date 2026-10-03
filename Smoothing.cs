@@ -70,7 +70,8 @@ internal sealed class CursorSmoothing
     }
     internal Pose Effects(Pose pose, double dt, AnimationOptions options)
     {
-        double difference = (pose.Axis - lastAxis + 540) % 360 - 180;
+        // A squash axis is identical after 180 degrees; a reversal must not spin it.
+        double difference = ((pose.Axis - lastAxis + 90) % 180 + 180) % 180 - 90;
         unwrappedAxis += difference; lastAxis = pose.Axis;
         // Reset disabled channels immediately: smoothing must never override a switch.
         if (!options.EffectsSmoothing || (!options.Animation && !options.FaceMovement))
@@ -82,11 +83,12 @@ internal sealed class CursorSmoothing
             if (!enabled) { filter.Reset(target); return target; }
             return filter.Update(target, dt, options.EffectsMethod, true);
         }
+        double angle = Filter(rotation, pose.Rotation, options.Direction != DirectionStyle.ReturnToRest && (options.FaceMovement || options.Rotation || options.Wobble));
         return pose with {
-            Rotation = Filter(rotation, pose.Rotation, options.FaceMovement || options.Rotation || options.Wobble),
+            Rotation = angle,
             Stretch = Filter(stretch, pose.Stretch, options.Stretch),
             Squash = Filter(squash, pose.Squash, options.Squash),
-            Axis = Filter(axis, unwrappedAxis, options.Squash)
+            Axis = options.FaceMovement ? angle - 135 : Filter(axis, unwrappedAxis, options.Squash)
         };
     }
     internal void Reset(double targetX, double targetY)

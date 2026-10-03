@@ -12,6 +12,8 @@ internal sealed class CursorEngine : IDisposable
     private readonly ClickMotion clicks = new();
     private readonly CursorSmoothing smoothing = new();
     private readonly DesktopPolicy desktop = new();
+    private readonly ShellCursor shellCursor = new();
+    private EventWaitHandle? shellActive;
     private bool refreshVisibility, magnificationChangesFlags;
     private MouseClickListener? clickListener;
     private EventWaitHandle? guardStop;
@@ -28,6 +30,7 @@ internal sealed class CursorEngine : IDisposable
     internal Pose Pose { get; private set; } = new(0, 1, 1, 0);
     internal int VisibleFrames { get; private set; }
     internal int HiddenFrames { get; private set; }
+    internal bool ShellConflict { get; private set; }
     internal static bool HasCursorX()
     {
         var processes = Process.GetProcessesByName("cursorqt_core");
@@ -41,6 +44,7 @@ internal sealed class CursorEngine : IDisposable
         string token = Guid.NewGuid().ToString("N");
         using var ready = new EventWaitHandle(false, EventResetMode.ManualReset, @"Local\GPTCursorReady-" + token);
         guardStop = new EventWaitHandle(false, EventResetMode.ManualReset, @"Local\GPTCursorStop-" + token);
+        shellActive = new EventWaitHandle(false, EventResetMode.ManualReset, @"Local\GPTCursorShell-" + token);
         try
         {
             if (!Native.MagInitialize()) throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -64,7 +68,7 @@ internal sealed class CursorEngine : IDisposable
             clicks.Reset();
             smoothing.Reset(pointer.X, pointer.Y);
             clickListener = new MouseClickListener(PreviewClick);
-            Active = true; motion.Reset(); lastFrame = null;
+            Active = true; ShellConflict = false; motion.Reset(); lastFrame = null;
             Tick(1.0 / 60);
         }
         catch { Stop(); throw; }
@@ -93,8 +97,17 @@ internal sealed class CursorEngine : IDisposable
         if (desktop.ShouldPause(Options))
         {
             smoothing.Position(point.X, point.Y, dt, Options, true);
+            if (desktop.Reason == "shell")
+            {
+                SetHidden(false);
+                shellActive?.Set();
+                shellCursor.Show(renderer, Size);
+                ShellConflict |= shellCursor.Overridden;
+            }
+            else RestoreShellCursor();
             SetHidden(false); overlay?.Conceal(); HiddenFrames++; return;
         }
+        RestoreShellCursor();
         var info = new Native.CursorInfo { Size = Marshal.SizeOf<Native.CursorInfo>() };
         if (!Native.GetCursorInfo(ref info)) { SuspendForDesktop(); return; }
         bool special = !AllPointers && specialPointers.Contains(info.Cursor);
@@ -115,14 +128,16 @@ internal sealed class CursorEngine : IDisposable
     }
     private void SuspendForDesktop()
     {
+        RestoreShellCursor();
         overlay?.Conceal();
         if (initialized) Native.MagShowSystemCursor(true);
         refreshVisibility = true;
     }
     internal void Stop()
     {
+        RestoreShellCursor();
         clickListener?.Dispose(); clickListener = null; clicks.Reset();
-        // Do not modify any cursor image managed by Windows or MouseX.
+        // Shell artwork has already been restored; make the native pointer visible.
         if (initialized)
         {
             if (!Native.MagShowSystemCursor(true)) throw new Win32Exception(Marshal.GetLastWin32Error());
@@ -130,9 +145,15 @@ internal sealed class CursorEngine : IDisposable
         }
         Active = false; overlay?.Dispose(); overlay = null;
         guardStop?.Set(); guardStop?.Dispose(); guardStop = null;
+        shellActive?.Dispose(); shellActive = null;
         if (guard != null) { guard.WaitForExit(1500); guard.Dispose(); guard = null; }
         if (initialized) { Native.MagUninitialize(); initialized = false; }
         lastFrame = null;
+    }
+    private void RestoreShellCursor()
+    {
+        if (shellCursor.Active) shellCursor.Restore();
+        shellActive?.Reset();
     }
     internal void PreviewClick(bool rightButton)
     {
@@ -157,7 +178,18 @@ internal sealed class CursorEngine : IDisposable
     {
         using var stop = EventWaitHandle.OpenExisting(@"Local\GPTCursorStop-" + token);
         using var ready = EventWaitHandle.OpenExisting(@"Local\GPTCursorReady-" + token);
-        if (!Native.MagInitialize()) return;
+        using var shell = EventWaitHandle.OpenExisting(@"Local\GPTCursorShell-" + token);
+        var saved = new Dictionary<uint, nint>();
+        foreach (uint role in new[] { Native.Arrow, Native.Hand })
+        {
+            nint cursor = Native.CopyIcon(Native.LoadCursor(0, (nint)role));
+            if (cursor != 0) saved.Add(role, cursor);
+        }
+        if (!Native.MagInitialize())
+        {
+            foreach (nint cursor in saved.Values) Native.DestroyCursor(cursor);
+            return;
+        }
         try
         {
             using var parent = Process.GetProcessById(parentId);
@@ -165,9 +197,11 @@ internal sealed class CursorEngine : IDisposable
             while (!stop.WaitOne(200))
             {
                 if (!parent.HasExited) continue;
+                if (shell.WaitOne(0))
+                    foreach (var pair in saved) Native.Install(Native.CopyIcon(pair.Value), pair.Key);
                 Native.MagShowSystemCursor(true); return;
             }
         }
-        finally { Native.MagUninitialize(); }
+        finally { foreach (nint cursor in saved.Values) Native.DestroyCursor(cursor); Native.MagUninitialize(); }
     }
 }

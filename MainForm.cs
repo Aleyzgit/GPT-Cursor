@@ -175,7 +175,7 @@ internal sealed class MainForm : Form
         var exclusions = new TextBox { Location = new Point(24, 264), Size = new Size(505, 30), Text = preferences.ExcludedApps };
         translations.Add(() => exclusions.AccessibleName = T("Excluded applications", "Ausgeschlossene Anwendungen"));
         exclusions.TextChanged += (_, _) => { preferences.ExcludedApps = exclusions.Text; Save(); };
-        var compatibility = LabelAt("Start menu and secure Windows prompts use the native cursor. Fullscreen apps and exclusions temporarily pause this overlay.", "Startmenü und geschützte Windows-Abfragen nutzen den Systemzeiger. In Vollbild-Apps und Ausnahmen pausiert das Overlay.", 24, 312, 505, 82);
+        var compatibility = LabelAt("Start/search uses a static Windows cursor fallback. Other cursor apps may override it. Secure prompts use the system cursor. No additional cursor software is required.", "Start/Suche nutzt einen statischen Windows-Cursor-Fallback. Andere Cursor-Apps können ihn überschreiben. Geschützte Abfragen nutzen den Systemzeiger. Keine Zusatzsoftware nötig.", 24, 312, 505, 82);
         compatibility.Font = new Font("Segoe UI", 9);
         foreach (var control in new Control[] { startup, fullscreen, exclusionsLabel, exclusions, compatibility })
         { Controls.Remove(control); systemPage.Controls.Add(control); }
@@ -199,7 +199,9 @@ internal sealed class MainForm : Form
             { nextUpdateCheck = now + 21600; _ = CheckForUpdates(); }
             try
             {
+                bool hadConflict = engine.ShellConflict;
                 engine.Tick(now - lastTime);
+                if (!hadConflict && engine.ShellConflict) UpdateStatus();
                 if (now - lastPreview >= 1.0 / 60 && Visible && WindowState != FormWindowState.Minimized)
                 { preview.Invalidate(); lastPreview = now; }
             }
@@ -353,6 +355,7 @@ internal sealed class MainForm : Form
         tray.Text = "GPT Cursor · " + (engine.Active ? T("active", "aktiv") : T("paused", "pausiert"));
         status.Text = noticeEn != null ? T(noticeEn, noticeDe!) :
             preferences.ShortcutEnabled && shortcut is { Id: 0 } ? T("Shortcut unavailable. Click its keys to choose another.", "Kürzel belegt. Zum Ändern auf die Tastenkombination klicken.") :
+            engine.Active && engine.ShellConflict ? T("Active · Windows cursor fallback was overridden", "Aktiv · Windows-Cursor-Fallback wurde überschrieben") :
             engine.Active ? T("Active · Closing restores your regular cursor", "Aktiv · Schließen stellt deinen normalen Cursor wieder her") : T("Paused · Your regular cursor is active", "Pausiert · Dein normaler Cursor ist aktiv");
     }
     private void PaintPreview(object? sender, PaintEventArgs e)

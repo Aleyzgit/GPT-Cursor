@@ -36,8 +36,8 @@ internal sealed class Motion
     private bool initialized, moving;
     private readonly HeadingTracker heading = new();
     private readonly Spring returningTurn = new(0, .18, 1);
-    private double headingIdle;
-    private bool wasReturning;
+    private double headingIdle, returnTarget;
+    private bool wasReturning, returningHome;
     internal bool HeadingChanged => heading.Changed;
     internal Pose Current { get; private set; } = new(0, 1, 1, 0);
 
@@ -73,13 +73,23 @@ internal sealed class Motion
         double rotation = facingRotation;
         if (returning)
         {
-            if (!wasReturning) { returningTurn.Reset(Current.Rotation); headingIdle = .10; }
+            if (!wasReturning) { returningTurn.Reset(Current.Rotation); returnTarget = Current.Rotation; headingIdle = .10; returningHome = false; }
             headingIdle = heading.Changed ? 0 : headingIdle + dt;
             // Tolerate gaps between mouse reports, then return along the shortest arc.
             // Quantized one-pixel resting jitter must not restart the directional turn.
-            double target = headingIdle < .10 ? facingRotation : 0;
-            double delta = ((target - returningTurn.Value + 180) % 360 + 360) % 360 - 180;
-            returningTurn.Target = returningTurn.Value + delta;
+            bool home = headingIdle >= .10;
+            if (home != returningHome) returnTarget = returningTurn.Value;
+            if (!home || home != returningHome)
+            {
+                double target = home ? 0 : facingRotation;
+                double delta = ((target - returnTarget + 180) % 360 + 360) % 360 - 180;
+                returnTarget += delta;
+            }
+            returningHome = home;
+            // Drop old angular momentum when the requested turn reverses.
+            if ((returnTarget - returningTurn.Value) * returningTurn.Velocity < 0)
+                returningTurn.Velocity = returningTurn.Force = 0;
+            returningTurn.Target = returnTarget;
             returningTurn.Step(dt);
             rotation = returningTurn.Value;
             if (animate && options!.Wobble && headingIdle >= .10)
@@ -93,7 +103,7 @@ internal sealed class Motion
             options?.FaceMovement == true ? rotation :
                 (animate && (options?.Rotation ?? true) ? turn.Value : 0) + (animate && (options?.Wobble ?? true) ? wobble : 0),
             animate && (options?.Stretch ?? true) ? stretch.Value : 1,
-            animate && (options?.Squash ?? true) ? squash.Value : 1, returning ? facingRotation - 135 : direction);
+            animate && (options?.Squash ?? true) ? squash.Value : 1, options?.FaceMovement == true ? rotation - 135 : direction);
         return Current;
     }
     internal void Reset() { initialized = moving = wasReturning = false; idle = headingIdle = 0; heading.Reset(); returningTurn.Reset(0); turn.Reset(0); squash.Reset(1); stretch.Reset(1); Current = new(0, 1, 1, 0); }

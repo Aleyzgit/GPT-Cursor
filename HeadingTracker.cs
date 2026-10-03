@@ -8,10 +8,10 @@ internal sealed class HeadingTracker
     private double lastX, lastY, distance, angle = -135;
     private bool hasDirection;
     private bool paused;
-    private double sampleX, sampleY, restX, restY;
+    private double sampleX, sampleY, restX, restY, segmentX, segmentY;
     internal double Rotation { get; private set; }
     internal bool Changed { get; private set; }
-    internal void Reset() { trail.Clear(); distance = 0; angle = -135; Rotation = 0; Changed = hasDirection = paused = false; }
+    internal void Reset() { trail.Clear(); distance = segmentX = segmentY = 0; angle = -135; Rotation = 0; Changed = hasDirection = paused = false; }
     internal double Update(double x, double y)
     {
         Changed = false;
@@ -25,6 +25,12 @@ internal sealed class HeadingTracker
         }
         double dx = x - lastX, dy = y - lastY, length = Math.Sqrt(dx * dx + dy * dy);
         if (length < 2) return Rotation;
+        if (hasDirection && dx * segmentX + dy * segmentY < -length * Math.Sqrt(segmentX * segmentX + segmentY * segmentY) * .5)
+        {
+            // A U-turn must not average the outgoing and returning parts of the trail.
+            trail.Clear(); trail.Add((lastX, lastY, 0)); distance = 0;
+        }
+        segmentX = dx; segmentY = dy;
         distance += length; lastX = x; lastY = y;
         trail.Add((x, y, distance));
         double start = Math.Max(0, distance - 24);
